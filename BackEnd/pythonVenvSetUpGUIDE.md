@@ -33,10 +33,7 @@ If you want to try installing a package, try:
 pip install cowsay
 ```
 
-And then try to run a .py file with
-
-> include cowsay
-> In it, and if no errors occour, you have done everything correctly.
+To test it, try to run a .py file with "include cowsay" in it, and an implementation like "cowsay.cow("Hellooooow")", and if no errors occours and you see a talking cow on your terminal, good job, you have done everything correctly!
 
 ## Deactivating a venv
 
