@@ -185,6 +185,7 @@
     - Linguaggio: Dart
 
 25. **Selezione/scatto dell'immagine**
+    - Nota: `Forse non vanno pk serve chiedere le autorizzazioni all'utente`
     - Package: `image_picker` (pub.dev)
     - Funzione: `ImagePicker().pickImage(source: ImageSource.camera)` oppure `ImageSource.gallery`
 
