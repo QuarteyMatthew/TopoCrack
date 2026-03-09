@@ -1,7 +1,5 @@
 # Analizzatore di Crepe — Guida di Riferimento Completa
 
-[link alla chat Claude](https://claude.ai/share/390c473e-d458-4100-8425-53ec1a0982a3)
-
 ---
 
 ## ARCHITETTURA GENERALE
@@ -79,15 +77,20 @@
 ### FASE 3: Normalizzazione (standardizzazione della curva)
 
 10. **Centratura della curva**
-    - Sposta la curva in modo che il primo punto sia nell'origine (0,0)
-    - Sottrai il primo punto da tutti i punti: `points -= points[0]`
+    - Sposta la curva in modo che il suo centroide sia nell'origine (0,0)
+    - Calcola il centroide come media di tutti i punti: `centroid = points.mean(axis=0)`
+    - Sottrai il centroide: `points -= centroid`
+    - ⚠️ Non usare il primo punto come origine: per curve con concavità il centroide è più stabile e rappresentativo
 
-11. **Rotazione (allineamento asse con PCA)**
-    - Libreria: `scikit-learn` oppure `numpy`
-    - Funzione: `sklearn.decomposition.PCA(n_components=2).fit(points)`
-    - Ruota i punti in modo che l'asse principale della curva sia orizzontale
-    - Alternativa manuale: calcola l'angolo tra primo e ultimo punto con `numpy.arctan2()` e ruota con una matrice di rotazione 2D
-    - Il risultato deve avere primo e ultimo punto con y ≈ 0
+11. **Rotazione (allineamento asse con PCA sull'intera nuvola di punti)**
+    - Libreria: `numpy` (senza scikit-learn, è più diretto)
+    - Procedura:
+      - Calcola la matrice di covarianza: `cov = numpy.cov(points.T)`
+      - Calcola autovettori: `eigenvalues, eigenvectors = numpy.linalg.eigh(cov)`
+      - L'autovettore con autovalore maggiore è l'asse principale della curva
+      - Ruota: `points_rotated = points @ eigenvectors[:, ::-1]`
+    - Questo funziona correttamente anche per curve con golfi e concavità profonde, perché considera l'intera forma e non solo gli estremi
+    - ⚠️ NON allineare usando solo il primo e l'ultimo punto: per curve non-funzione (golfi, S) quei due punti non rappresentano l'orientamento reale della curva
 
 12. **Normalizzazione della scala**
     - Dividi tutti i punti per la lunghezza totale della curva → la curva ha lunghezza 1
@@ -133,10 +136,13 @@
 ### FASE 5: Confronto e ricerca della costa simile
 
 19. **Pre-filtering (eliminare candidati ovviamente diversi)**
-    - Prima del DTW (costoso), filtra i tratti in modo rapido:
-    - **Metodo 1 — Aspect ratio**: confronta il rapporto larghezza/altezza della bounding box
-    - **Metodo 2 — Fourier Descriptors**: calcola i primi N coefficienti FFT della curva con `numpy.fft.fft()` e confronta le distanze euclidee tra i descrittori
-    - Tieni solo i top-K candidati (es. top 200) per il DTW completo
+    - Prima del DTW (costoso), filtra i tratti in modo rapido con la **curvatura totale**
+    - Procedura:
+      - Per ogni curva calcola gli angoli tra segmenti successivi: `angles = numpy.arctan2(numpy.diff(points[:,1]), numpy.diff(points[:,0]))`
+      - Calcola la variazione angolare cumulativa: `total_curvature = numpy.sum(numpy.abs(numpy.diff(angles)))`
+      - Questo valore è un numero solo, confrontabile in O(1)
+    - Due curve con curvatura totale molto diversa (es. differenza > 30%) non si somiglieranno mai → scartale senza fare DTW
+    - Tieni solo i top-K candidati per curvatura più simile (es. top 200)
 
 20. **Dynamic Time Warping (DTW)**
     - Libreria: `dtaidistance` (veloce, implementazione C) oppure `tslearn`
@@ -150,14 +156,7 @@
     - Ordina i candidati per distanza DTW crescente
     - Restituisce i **top 3** risultati come JSON:
       ```json
-      [
-        {
-          "id": "...",
-          "nome": "Costa Amalfitana",
-          "score": 0.043,
-          "immagine_url": "..."
-        }
-      ]
+      [{"id": "...", "nome": "Costa Amalfitana", "score": 0.043, "immagine_url": "..."}]
       ```
 
 ---
@@ -185,7 +184,6 @@
     - Linguaggio: Dart
 
 25. **Selezione/scatto dell'immagine**
-    - Nota: `Forse non vanno pk serve chiedere le autorizzazioni all'utente`
     - Package: `image_picker` (pub.dev)
     - Funzione: `ImagePicker().pickImage(source: ImageSource.camera)` oppure `ImageSource.gallery`
 
@@ -217,54 +215,51 @@
 
 ## PARTE 3 — LIBRERIE RIEPILOGO
 
-| Scopo                        | Libreria              | Installazione                                  |
-| ---------------------------- | --------------------- | ---------------------------------------------- |
-| API REST                     | `fastapi` + `uvicorn` | `pip install fastapi uvicorn python-multipart` |
-| Computer Vision              | `opencv-python`       | `pip install opencv-python`                    |
-| Skeletonization              | `scikit-image`        | `pip install scikit-image`                     |
-| Analisi grafo skeleton       | `sknw`                | `pip install sknw`                             |
-| Dati geografici              | `geopandas`           | `pip install geopandas`                        |
-| Geometrie                    | `shapely`             | incluso in geopandas                           |
-| DTW                          | `dtaidistance`        | `pip install dtaidistance`                     |
-| Array e math                 | `numpy`               | `pip install numpy`                            |
-| Interpolazione               | `scipy`               | `pip install scipy`                            |
-| PCA                          | `scikit-learn`        | `pip install scikit-learn`                     |
-| Grafici coste                | `matplotlib`          | `pip install matplotlib`                       |
-| Selezione immagine (Flutter) | `image_picker`        | `flutter pub add image_picker`                 |
-| HTTP (Flutter)               | `dio`                 | `flutter pub add dio`                          |
-| State management (Flutter)   | `riverpod`            | `flutter pub add flutter_riverpod`             |
+| Scopo | Libreria | Installazione |
+|---|---|---|
+| API REST | `fastapi` + `uvicorn` | `pip install fastapi uvicorn python-multipart` |
+| Computer Vision | `opencv-python` | `pip install opencv-python` |
+| Skeletonization | `scikit-image` | `pip install scikit-image` |
+| Analisi grafo skeleton | `sknw` | `pip install sknw` |
+| Dati geografici | `geopandas` | `pip install geopandas` |
+| Geometrie | `shapely` | incluso in geopandas |
+| DTW | `dtaidistance` | `pip install dtaidistance` |
+| Array e math | `numpy` | `pip install numpy` |
+| Interpolazione | `scipy` | `pip install scipy` |
+| PCA/rotazione | `numpy` | già incluso |
+| Grafici coste | `matplotlib` | `pip install matplotlib` |
+| Selezione immagine (Flutter) | `image_picker` | `flutter pub add image_picker` |
+| HTTP (Flutter) | `dio` | `flutter pub add dio` |
+| State management (Flutter) | `riverpod` | `flutter pub add flutter_riverpod` |
 
 ---
 
 ## PARTE 4 — DATASET COSTIERI
 
-| Nome                | URL                          | Formato             | Note                                   |
-| ------------------- | ---------------------------- | ------------------- | -------------------------------------- |
-| Natural Earth 1:10m | naturalearthdata.com         | Shapefile / GeoJSON | Inizia da qui, facile                  |
-| GSHHG               | ngdc.noaa.gov/mgg/shorelines | Shapefile           | Alta risoluzione, standard scientifico |
-| OpenStreetMap       | geofabrik.de                 | PBF / GeoJSON       | Per aree specifiche                    |
-| EUROSION            | eea.europa.eu                | Shapefile           | Solo coste europee, molto dettagliato  |
+| Nome | URL | Formato | Note |
+|---|---|---|---|
+| Natural Earth 1:10m | naturalearthdata.com | Shapefile / GeoJSON | Inizia da qui, facile |
+| GSHHG | ngdc.noaa.gov/mgg/shorelines | Shapefile | Alta risoluzione, standard scientifico |
+| OpenStreetMap | geofabrik.de | PBF / GeoJSON | Per aree specifiche |
+| EUROSION | eea.europa.eu | Shapefile | Solo coste europee, molto dettagliato |
 
 ---
 
 ## PARTE 5 — ORDINE DI SVILUPPO CONSIGLIATO
 
 **Mese 1**
-
 - [ ] Installa Python, OpenCV, scikit-image
 - [ ] Scrivi la pipeline CV in un Jupyter Notebook (passi 1–9)
 - [ ] Testa su 5-10 foto di crepe diverse
 - [ ] Scarica Natural Earth, segmenta le coste, costruisci il database (passi 14–18)
 
 **Mese 2**
-
 - [ ] Implementa normalizzazione completa (passi 10–13)
 - [ ] Implementa pre-filtering e DTW (passi 19–20)
 - [ ] Crea il backend FastAPI (passi 22–23)
 - [ ] Testa il sistema end-to-end da Postman o curl
 
 **Mese 3**
-
 - [ ] Sviluppa l'app Flutter (passi 24–29)
 - [ ] Collega Flutter al backend
 - [ ] Deploy del backend su server
