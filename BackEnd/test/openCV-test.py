@@ -55,8 +55,12 @@ kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
 closed_img_1 = cv2.morphologyEx(filtered_img_1, cv2.MORPH_CLOSE, kernel)
 cv2.imshow('Closed 1 - morphologyEx', closed_img_1)
 
+# Skeletonize
 skele_img_1 = sk.morphology.skeletonize(closed_img_1)
-cv2.imshow('Skele 1 - skeletonize', skele_img_1)
+
+# Converts the boolean array returned by skeletonize to an array of uin8 so that it is OpenCV compatible
+skele_opencv = (skele_img_1 * 255).astype(np.uint8)
+cv2.imshow('Skele 1 - skeletonize', skele_opencv)
 
 cv2.waitKey(0)
 
