@@ -1,2 +1,3 @@
 opencv-python==4.13.0.92
 scikit-image==0.26.0
+sknw==0.12

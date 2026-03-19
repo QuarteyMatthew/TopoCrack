@@ -31,9 +31,9 @@ else
     exit 1
 }
 
-if (Test-Path "Dependencies.txt") {
+if (Test-Path "..\Dependencies.txt") {
     Write-Output "Installazione da Dependencies.txt..."
-    pip install -r Dependencies.txt
+    pip install -r ..\Dependencies.txt
     exit 0
 }
 

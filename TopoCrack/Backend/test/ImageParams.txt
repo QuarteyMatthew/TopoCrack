@@ -1,0 +1,2 @@
+Image 01:
+    d=8; sigmaColor=170; sigmaSpace=100; darkPerc=15
