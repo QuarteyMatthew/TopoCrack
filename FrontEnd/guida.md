@@ -5,7 +5,7 @@ In oltre,  Dart è progettato per si di visualizzare istantaneamente le modifich
 ## 04/03/2026
 
 
-## DART
+## **DART**
 
     
 Tutte le variabili si dichiarano definendo il tipo: 
@@ -31,3 +31,37 @@ variabili definibili indirettamente tramite il getter method inveced di una vari
     this(name, null) chiama il costruttore principale della classe Spacecraft, passando:
     name: il valore ricevuto come parametro.
     null: indica che la data di lancio non è ancora impostata.
+
+
+## **FLUTTER CODE**
+
+```
+void main(){
+    runApp (const MyApp());
+}
+```
+
+questo è il main aentry point dove "Cosa/dove" il programma eseguirà per primo
+
+```
+class TopoCrack extends StatelessWidget {
+.
+.
+.
+}
+```
+questa funzione è la funzione cha da vita cioè visibilità al applicazione creando il main widget
+## **Font**
+
+per le font creo una cartella parte nel main brach di fronend e all'interno aggiungo tutte le font. in fine per utilizzarle mi diriggo verso pubspec.yaml  tolgo i commenti dal font example e aggiungo la font family, font con vari asset "path del font dentro la cartella" e weight.
+
+    font:
+        - family:
+          fonts:
+            - asset: 
+              weight:
+
+
+per confermare il tutto dal terminale
+
+    flutter pub get

@@ -1,121 +1,283 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'GeoShare',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(),
+      home: const HomeScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+// ─────────────────────────────────────────────
+// HOME SCREEN
+// ─────────────────────────────────────────────
 
-  final String title;
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _HomeScreenState extends State<HomeScreen> {
+  int _selectedTab = 1; // 0=bookmarks, 1=camera, 2=gallery
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  void _onTabTap(int index) {
+    setState(() => _selectedTab = index);
+    // TODO: implementa la navigazione per ogni tab
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+      extendBodyBehindAppBar: true,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // ── 1. BACKGROUND IMAGE ──────────────────────
+          _BackgroundImage(),
+
+          // ── 2. DARK OVERLAY (leggero) ────────────────
+          //Container(color: Colors.black.withOpacity(0.18)),
+
+          // ── 3. TOP BAR ───────────────────────────────
+          const _TopBar(),
+
+          // ── 4. BOTTOM NAV BAR ────────────────────────
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: _BottomNavBar(
+              selectedIndex: _selectedTab,
+              onTap: _onTabTap,
+            ),
+          ),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// BACKGROUND IMAGE
+// ─────────────────────────────────────────────
+
+class _BackgroundImage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.expand(
+      child: Image.asset(
+        'assets/bg.jpg',
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// TOP BAR
+// ─────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  const _TopBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Positioned(
+      top: top + 8,
+      left: 16,
+      right: 16,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Folder / menu icon
+          _TopIconButton(
+            icon: Icons.folder_rounded,
+            onTap: () {
+              // TODO: apri cartella / menu
+            },
+          ),
+          // Profile icon
+          _TopIconButton(
+            icon: Icons.settings_rounded,
+            //togliere lo sfondo dalle icone
+            onTap: () {
+              // TODO: apri menu
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _TopIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.35),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: Colors.white, size: 22),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// BOTTOM NAV BAR
+// ─────────────────────────────────────────────
+
+class _BottomNavBar extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+
+  const _BottomNavBar({
+    required this.selectedIndex,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).padding.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom + 24, left: 40, right: 40),
+      child: Container(
+        height: 72,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.55),
+          borderRadius: BorderRadius.circular(36),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.12),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            // ── Bookmarks ──
+            _NavItem(
+              icon: Icons.bookmark_border_rounded,
+              iconSelected: Icons.bookmark_rounded,
+              isSelected: selectedIndex == 0,
+              isCenter: false,
+              onTap: () => onTap(0),
+            ),
+            // ── Camera (center, elevated) ──
+            _NavItem(
+              icon: Icons.camera_alt_outlined,
+              iconSelected: Icons.camera_alt_rounded,
+              isSelected: selectedIndex == 1,
+              isCenter: true,
+              onTap: () => onTap(1),
+            ),
+            // ── Gallery ──
+            _NavItem(
+              icon: Icons.image_outlined,
+              iconSelected: Icons.image_rounded,
+              isSelected: selectedIndex == 2,
+              isCenter: false,
+              onTap: () => onTap(2),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData iconSelected;
+  final bool isSelected;
+  final bool isCenter;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.iconSelected,
+    required this.isSelected,
+    required this.isCenter,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCenter) {
+      return GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutBack,
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isSelected ? Colors.white : const Color(0xFF2A2A2A),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Icon(
+            isSelected ? iconSelected : icon,
+            color: isSelected ? Colors.black : Colors.white,
+            size: 26,
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedScale(
+        scale: isSelected ? 1.15 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: Icon(
+          isSelected ? iconSelected : icon,
+          color: isSelected ? Colors.white : Colors.white54,
+          size: 26,
+        ),
       ),
     );
   }
