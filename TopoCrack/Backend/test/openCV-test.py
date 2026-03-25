@@ -107,6 +107,7 @@ while uInput != "quit":
         coords.extend(edge['pts'].tolist())  # intermediate pixel coords
 
     coords = np.array(coords)  # shape (N, 2), each row is [row, col]
+    black_image = np.zeros((int(new_width), int(new_width/img_ratio), 3), dtype=np.uint8)
     cv2.polylines(skele_img_display, [coords], isClosed=False, color=(0, 255, 0), thickness=3, lineType=cv2.LINE_AA)
     
     cv2.imshow('VIII. Graph', skele_img_display)
