@@ -17,7 +17,7 @@ if (-not (Test-Path $venvDir))
 }
 else
 {
-    Write-Output "Virtualenv $venvDir già presente."
+    Write-Output "Virtualenv $venvDir gia' presente."
 }
 
 $activateScript = Join-Path $venvDir "Scripts\Activate.ps1"
@@ -31,9 +31,11 @@ else
     exit 1
 }
 
-if (Test-Path "..\Dependencies.txt") {
+if (Test-Path "$grandParent\Dependencies.txt") {
+    Write-Output "Upgrade di pip..."
+    python -m pip install --upgrade pip
     Write-Output "Installazione da Dependencies.txt..."
-    pip install -r ..\Dependencies.txt
+    pip install -r $grandParent\Dependencies.txt
     exit 0
 }
 
