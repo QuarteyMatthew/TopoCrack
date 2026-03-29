@@ -15,16 +15,18 @@ img = cv2.imread(f'{script_dir}/img/crack01.jpg', cv2.IMREAD_GRAYSCALE)
 img_height, img_width = img.shape[:2]
 print("Width:", img_width, "\nHeight:", img_height)
 img_ratio = img_width/img_height
+print("Image ratio:", img_ratio)
 # Dynamic size for both vertical and horizontal images
+max_display_length = 800
 if img_ratio > 1:
-    display_width, display_height = int(800), int(800/img_ratio)
+    display_width, display_height = int(max_display_length), int(max_display_length/img_ratio)
 else:
-    display_width, display_height = int(800/img_ratio), int(800)
+    display_width, display_height = int(max_display_length*img_ratio), int(max_display_length)
 # Resizing image
 img = cv2.resize(img, (display_width, display_height))
 
 # Show original image
-# cv2.imshow('I. Crack 01 - B/W', img)
+cv2.imshow('I. Crack 01 - B/W', img)
 
 # ============= CLACHE Image =============
 clahe1 = cv2.createCLAHE(clipLimit=3)
@@ -33,10 +35,10 @@ clahe_img_1 = np.clip(clahe1.apply(img), 0, 255).astype(np.uint8)
 # cv2.imshow('II. Crack 01 - CLAHE1', clahe_img_1)
 
 # ============= Bilateral Filtering Params =============
-d = 10
-sigmaColor = sigmaSpace = 100
+d = 9
+sigmaColor = sigmaSpace = 120
 # ============= Bilateral Filtering Params =============
-darkestPixelPercentage = 20
+darkestPixelPercentage = 25
 
 uInput = ""
 print("1=>d+=1; 2=>d-=1; 3=>sigmaColor+=5; 4=>sigmaColor-=5;\
@@ -107,8 +109,8 @@ while uInput != "quit":
         # Converti in uint8 per OpenCV: True→255, False→0
         # 'astype(np.uint8)' converte i valori booleani della maschera in 0/1 interi
         # moltiplicando per 255 si ottiene un immagine in scala di grigi
-        skele_img_display = skele_img_1.astype(np.uint8) * 255
-        cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
+        # skele_img_display = skele_img_1.astype(np.uint8) * 255
+        # cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
         
         # ============= Find Main Path =============
         # 'build_sknw' è la funzione che:
@@ -257,9 +259,9 @@ while uInput != "quit":
             rgb_image[y, x] = (0, 0, 255) # End node is colored BLUE
     
     # Drawing the userStart
-    for i in range(-2, 2):
+    for i in range(-3, 4):
         # Giving a 2 px width to the line
-        for j in range(1):
+        for j in range(-1, 2):
             pixelX = userStart[0] + i + j # Applying the horizontal offset
             pixelY = userStart[1] + i + j # Applying the vertical offset
             if pixelX > 0 and pixelX < display_width:
@@ -268,13 +270,15 @@ while uInput != "quit":
                 rgb_image[pixelY, userStart[0]] = (255, 255, 0)
     
     # Drawing the userEnd
-    for i in range(-2, 2):
-        pixelX = userEnd[0] + i # Applying the horizontal offset
-        pixelY = userEnd[1] + i # Applying the vertical offset
-        if pixelX > 0 and pixelX < display_width:
-            rgb_image[userEnd[1], pixelX] = (255, 255, 0)
-        if pixelY > 0 and pixelY < display_height:
-            rgb_image[pixelY, userEnd[0]] = (0, 255, 255)
+    for i in range(-3, 4):
+        # Giving a 2 px width to the line
+        for j in range(-1, 2):
+            pixelX = userEnd[0] + i + j # Applying the horizontal offset
+            pixelY = userEnd[1] + i + j # Applying the vertical offset
+            if pixelX > 0 and pixelX < display_width:
+                rgb_image[userEnd[1], pixelX] = (255, 0, 255)
+            if pixelY > 0 and pixelY < display_height:
+                rgb_image[pixelY, userEnd[0]] = (255, 0, 255)
     
     cv2.imshow('VIII. Graph', rgb_image)
     
@@ -310,30 +314,30 @@ while uInput != "quit":
             darkestPixelPercentage -= 1
     elif key == ord('w'):
         # Goes up if it would stay inside the image
-        if userStart[1]<display_height:
-            userStart[1] -= 1
+        if userStart[1]>1:
+            userStart[1] -= 2
     elif key == ord('a'):
-        if userStart[0]>0:
-            userStart[0] -= 1
+        if userStart[0]>1:
+            userStart[0] -= 2
     elif key == ord('s'):
-        if userStart[1]>0:
-            userStart[1] += 1
+        if userStart[1]<display_height-2:
+            userStart[1] += 2
     elif key == ord('d'):
-        if userStart[0]<display_width:
-            userStart[0] += 1
+        if userStart[0]<display_width-2:
+            userStart[0] += 2
     elif key == ord('i'):
         # Goes up if it would stay inside the image
-        if userEnd[1]<display_height:
-            userEnd[1] -= 1
+        if userEnd[1]>1:
+            userEnd[1] -= 2
     elif key == ord('j'):
-        if userEnd[0]>0:
-            userEnd[0] -= 1
+        if userEnd[0]>1:
+            userEnd[0] -= 2
     elif key == ord('k'):
-        if userEnd[1]>0:
-            userEnd[1] += 1
+        if userEnd[1]<display_height-2:
+            userEnd[1] += 2
     elif key == ord('l'):
-        if userEnd[0]<display_width:
-            userEnd[0] += 1
+        if userEnd[0]<display_width-2:
+            userEnd[0] += 2
             
 
 # ============= Destroy windows =============
