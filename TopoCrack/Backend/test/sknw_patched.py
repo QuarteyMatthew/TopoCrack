@@ -197,6 +197,9 @@ def trace(img, p, nbs, acc, buf):
             # abbiamo trovato il secondo nodo: arco completo
             break
     pts = np.array(buf_list, dtype=np.int64)
+    
+    if c1 == 0 or c2 == 0:
+        return None  # arco invalido
     return (int(c1 - 10), int(c2 - 10), idx2rc(pts, acc))
 
 
@@ -277,6 +280,8 @@ def build_graph(nodes, edges, multi=False):
     for i, nd in enumerate(nodes):
         pts = np.array(nd, dtype=np.int64)
         graph.add_node(i, pts=pts, o=pts.mean(axis=0))
+        
+    edges = [e for e in edges if e!=None] # Removes None edges
     for s, e, pts in edges:
         pts = np.array(pts, dtype=np.int64)
         if pts.shape[0] > 1:

@@ -39,152 +39,185 @@ sigmaColor = sigmaSpace = 100
 darkestPixelPercentage = 20
 
 uInput = ""
-print("W=>d+=1; S=>d-=1; E=>sigmaColor+=5; D=>sigmaColor-=5;\
-    R=>sigmaSpace+=5; F=>sigmaSpace-=5; T=>darkPerc+=1; G=>darkPerc-=1; Q=>Exit;")
+print("1=>d+=1; 2=>d-=1; 3=>sigmaColor+=5; 4=>sigmaColor-=5;\
+5=>sigmaSpace+=5; 6=>sigmaSpace-=5; 7=>darkPerc+=1; 8=>darkPerc-=1;\
+WASD=>move userStart; IJKL=>move userEnd; Q=>Exit;")
+
+# Controllo dell'elaborazione dell'immagine (permette di spostare i punti dell'utente senza elaborare ogni cambio di pixel)
+isImageProcessingPaused = False
+
+# I punti indicati dall'utente.
+# PER ORA SONO INDICATIVI
+userStart, userEnd = [[int(display_width/5), int(display_height/2)], [int(4*display_width/5), int(display_height/2)]]
+
+coords = []
+graph = None
 
 # Main Loop
-while uInput != "quit":  
-    print(f"d={d}; sigmaColor={sigmaColor}; sigmaSpace={sigmaSpace}; darkPerc={darkestPixelPercentage}")
-    
-    # ============= Bilateral Filtered Image =============
-    filtered_img_1 = cv2.bilateralFilter(clahe_img_1, d, sigmaColor, sigmaSpace)
-    # cv2.imshow('III. Filtered 1 - Bilateral', filtered_img_1)
+while uInput != "quit":
+    if not isImageProcessingPaused:
+        print(f"d={d}; sigmaColor={sigmaColor}; sigmaSpace={sigmaSpace}; darkPerc={darkestPixelPercentage}")
+        
+        # ============= Bilateral Filtered Image =============
+        filtered_img_1 = cv2.bilateralFilter(clahe_img_1, d, sigmaColor, sigmaSpace)
+        # cv2.imshow('III. Filtered 1 - Bilateral', filtered_img_1)
 
-    # ============= Brightness Flattening =============
-    threshold_percentile = np.percentile(filtered_img_1, darkestPixelPercentage)  # valore sotto cui cade il 20% più scuro
+        # ============= Brightness Flattening =============
+        threshold_percentile = np.percentile(filtered_img_1, darkestPixelPercentage)  # valore sotto cui cade il 20% più scuro
 
-    # Il pixel più scuro tra l'80% più chiaro
-    background_value = filtered_img_1[filtered_img_1 > threshold_percentile].min()
+        # Il pixel più scuro tra l'80% più chiaro
+        background_value = filtered_img_1[filtered_img_1 > threshold_percentile].min()
 
-    result = filtered_img_1.copy()
-    result[filtered_img_1 > threshold_percentile] = background_value
+        result = filtered_img_1.copy()
+        result[filtered_img_1 > threshold_percentile] = background_value
 
-    # cv2.imshow('Percentile filter', result)
+        # cv2.imshow('Percentile filter', result)
 
-    # ============= Edge Detection Image (Canny) =============
-    # Dopo il bilateral filter, Canny invece di threshold diretta
-    median1 = np.median(result.flatten())
-    lower1 = 0.66 * median1
-    upper1 = 1.33 * median1
-    thresholds1 = [lower1, upper1]
-    canned_img_1 = cv2.Canny(result, int(thresholds1[0]), int(thresholds1[1]))
-    # cv2.imshow('IV. Edges 1 - Canny', canned_img_1)
+        # ============= Edge Detection Image (Canny) =============
+        # Dopo il bilateral filter, Canny invece di threshold diretta
+        median1 = np.median(result.flatten())
+        lower1 = 0.66 * median1
+        upper1 = 1.33 * median1
+        thresholds1 = [lower1, upper1]
+        canned_img_1 = cv2.Canny(result, int(thresholds1[0]), int(thresholds1[1]))
+        # cv2.imshow('IV. Edges 1 - Canny', canned_img_1)
 
-    # ============= Closing Morphology Image =============
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
-    closed_img_1 = cv2.morphologyEx(canned_img_1, cv2.MORPH_CLOSE, kernel)
-    # cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
+        # ============= Closing Morphology Image =============
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
+        closed_img_1 = cv2.morphologyEx(canned_img_1, cv2.MORPH_CLOSE, kernel)
+        # cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
 
-    # ============= To Binary Image =============
-    # Ora binarizza (è già quasi binaria, ma per sicurezza)
-    _, binary_img_1 = cv2.threshold(closed_img_1, 127, 255, cv2.THRESH_BINARY)
-    # cv2.imshow('VI. Binary 1 - Otsu', binary_img_1)
+        # ============= To Binary Image =============
+        # Ora binarizza (è già quasi binaria, ma per sicurezza)
+        _, binary_img_1 = cv2.threshold(closed_img_1, 127, 255, cv2.THRESH_BINARY)
+        # cv2.imshow('VI. Binary 1 - Otsu', binary_img_1)
 
-    # ============= Skeletonization =============
-    # 'sk.morphology.skeletonize':
-    # applica l'algoritmo di thinning, riducendo ogni oggetto connesso
-    # ad una linea di spessore 1px preservando le ramificazioni
-    #
-    # 'binary_img_1 > 0':
-    # produce una maschera booleana dove i pixel di foreground sono True
-    #
-    # Il risultato è un array booleano della stessa dimensione della maschera:
-    # True sui pixel dello scheletro e False altrove
-    skele_img_1 = sk.morphology.skeletonize(binary_img_1 > 0)
+        # ============= Skeletonization =============
+        # 'sk.morphology.skeletonize':
+        # applica l'algoritmo di thinning, riducendo ogni oggetto connesso
+        # ad una linea di spessore 1px preservando le ramificazioni
+        #
+        # 'binary_img_1 > 0':
+        # produce una maschera booleana dove i pixel di foreground sono True
+        #
+        # Il risultato è un array booleano della stessa dimensione della maschera:
+        # True sui pixel dello scheletro e False altrove
+        skele_img_1 = sk.morphology.skeletonize(binary_img_1 > 0)
 
-    # Converti in uint8 per OpenCV: True→255, False→0
-    # 'astype(np.uint8)' converte i valori booleani della maschera in 0/1 interi
-    # moltiplicando per 255 si ottiene un immagine in scala di grigi
-    skele_img_display = skele_img_1.astype(np.uint8) * 255
-    cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
-    
-    # ============= Find Main Path =============
-    # 'build_sknw' è la funzione che:
-    # - aggiunge padding all'immagine data per evitare controlli sui bordi;
-    # - marca i pixel dello scheletro distinguendoli in passaggi (con due
-    #    connessioni - grado == 2) e nodi (con un numero di connessioni
-    #     diverso da 2 - grado != 2);
-    # - raggruppa i pixel di grado != 2 in componenti connesse (nodi);
-    # - traccia gli archi seguendo i pixel di passaggio tra i nodi;
-    # - costruisce un oggetto (network.Graph o MultiGraph) dove:
-    #   - ogni nodo ha attributi come 'pts' (coord. dei pixel che compongono il
-    #      nodo) e 'o' (il centroide del nodo);
-    #   - ogni arco ha attributi come 'pts' (linea di pixel che compongono
-    #      l'arco) e 'weight' (la lunghezza calcolata dalla somma delle
-    #       distanze tra punti consecutivi)
-    graph = sknw.build_sknw(skele_img_1)
+        # Converti in uint8 per OpenCV: True→255, False→0
+        # 'astype(np.uint8)' converte i valori booleani della maschera in 0/1 interi
+        # moltiplicando per 255 si ottiene un immagine in scala di grigi
+        skele_img_display = skele_img_1.astype(np.uint8) * 255
+        cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
+        
+        # ============= Find Main Path =============
+        # 'build_sknw' è la funzione che:
+        # - aggiunge padding all'immagine data per evitare controlli sui bordi;
+        # - marca i pixel dello scheletro distinguendoli in passaggi (con due
+        #    connessioni - grado == 2) e nodi (con un numero di connessioni
+        #     diverso da 2 - grado != 2);
+        # - raggruppa i pixel di grado != 2 in componenti connesse (nodi);
+        # - traccia gli archi seguendo i pixel di passaggio tra i nodi;
+        # - costruisce un oggetto (network.Graph o MultiGraph) dove:
+        #   - ogni nodo ha attributi come 'pts' (coord. dei pixel che compongono il
+        #      nodo) e 'o' (il centroide del nodo);
+        #   - ogni arco ha attributi come 'pts' (linea di pixel che compongono
+        #      l'arco) e 'weight' (la lunghezza calcolata dalla somma delle
+        #       distanze tra punti consecutivi)
+        graph = sknw.build_sknw(skele_img_1)
+        
+        # Raccoglie i nodi (n) con grado 1, cioè le 'punte' terminali
+        # (endpoints) dello scheletro, quelli che sono collegati a un solo
+        # altro nodo. Questi nodi sono i candidati estremi del ramo principale.
+        endpoints = [n for n in graph.nodes() if graph.degree(n) == 1]
 
-    
-    # Raccoglie i nodi (n) con grado 1, cioè le 'punte' terminali
-    # (endpoints) dello scheletro, quelli che sono collegati a un solo
-    # altro nodo. Questi nodi sono i candidati estremi del ramo principale.
-    endpoints = [n for n in graph.nodes() if graph.degree(n) == 1]
+        # Ricerca del percorso più lungo tra endpoints
+        ideal_path = [] # La lista dei nodi del path più lungo
+        longest_length = 0
 
-    # Ricerca del percorso più lungo tra endpoints
-    longest_path = [] # La lista dei nodi del path più lungo
-    longest_length = 0
+        # Ottiene la lista delle distanze tra i nodi del grafo e il punto indicato dall'utente
+        startCandidatesNorms = []
+        for n in graph.nodes():
+            startCandidatesNorms.append(np.linalg.norm(graph.nodes[n]['o'] - [userStart[1], userStart[0]]))
+        # Finds the index corresponding to the closest node to the userStart
+        startNodeIdx = startCandidatesNorms.index(min(startCandidatesNorms))
+        endNodeIdx = None
 
-    # Cicla per tutte le coppie di endpoints trovando la sequenza di nodi che
-    # minimizza la somma dei pesi (le distanze tra i nodi).
-    # 'i' è l'index e 'start' è l'elemento della lista data dall'enumerate in
-    # posizione i.
-    # for i, start in enumerate(endpoints):
-    #     for end in endpoints[i+1:]:
-    #         try:
-    #             # Trova tra tutti i percorsi tra il nodo 'start' e il nodo
-    #             # 'end' quello più corto con Dijkstra [pronun. /ˈdɛikstra/]
-    #             path = nx.longest_path(graph, start, end, weight='weight')
-    #             # Calcola la lunghezza del percorso più corto
-    #             length = nx.shortest_path_length(graph, start, end, weight='weight')
-    #             if length > longest_length:
-    #                 # Il percorso appena analizzato è più lungo di quelli precedenti
-    #                 longest_length = length
-    #                 longest_path = path
-    #         except nx.NetworkXNoPath:
-    #             # I due punti analizzati non sono connessi - vengono saltati
-    #             continue
-            
-    endpoints = [n for n in graph.nodes() if graph.degree(n) == 1]
+        # Trova la componente connessa di startNodeIdx
+        component = nx.node_connected_component(graph, startNodeIdx)
 
-    longest_path = []
-    longest_length = -1.0
+        # filtra solo i nodi della stessa componente
+        valid_targets = [n for n in component]
+        
+        if startNodeIdx in valid_targets:
+            # Toglie il nodo di partenza dai nodi candidati per non avere lo stesso nodo per start e end
+            valid_targets.remove(startNodeIdx)
 
-    for i, start in enumerate(endpoints):
-        # calcola distanze da start a tutti (Dijkstra once)
-        lengths = nx.single_source_dijkstra_path_length(graph, start, weight='weight')
-        for end in endpoints[i+1:]:
-            if end in lengths:
-                length = lengths[end]
-                if length > longest_length:
-                    longest_length = length
-                    longest_path = nx.shortest_path(graph, start, end, weight='weight')
+        # Trova il nodo collegato allo start con la distanza (la norma) minima dal punto indicato dall'utente
+        endNodeIdx = min(valid_targets, key=lambda n: np.linalg.norm(graph.nodes[n]['o'] - [userEnd[1], userEnd[0]]))
 
+        # Il percorso più corto tra i due nodi collegati trovati
+        # (il nodo start è il piu vicino al punto indicato dall'utente, mentre il nodo end è
+        # il più vicino al punto indicato dall'utente che è collegato al nodo di start).
+        ideal_path = nx.shortest_path(graph, startNodeIdx, endNodeIdx, weight='weight') 
 
-    # Vengono estratte le coordinate dei punti che compongono 'longest_path'
-    coords = []
-    # 'range' returns a range from start (def. 0) to stop (here the length of
-    # longest_path - 1)
-    for i in range(len(longest_path) - 1):
-        # Estrae dal grafo un nodo e il nodo ad esso consecutivo
-        edge = graph[longest_path[i]][longest_path[i+1]]
-        # Estende le coordinate aggiungendo i punti tra un nodo e il suo consecutivo
-        coords.extend(edge['pts'].tolist())
+        # Resets 'coords'
+        coords = []
 
-    # Conversione della lista in un array NumPy
-    coords = np.array(coords)
-    
+        # Vengono estratte le coordinate dei punti che compongono il percorso trovato:
+        # 'range' returns a range from start (def. 0) to stop (here the length of
+        # longest_path - 1)
+        for i in range(len(ideal_path) - 1):
+            # Estrae dal grafo un nodo e il nodo ad esso consecutivo
+            edge = graph[ideal_path[i]][ideal_path[i+1]]
+            # Estende le coordinate aggiungendo i punti tra un nodo e il suo consecutivo
+            coords.extend(edge['pts'].tolist())
+
+        # Conversione della lista in un array NumPy
+        coords = np.array(coords)
+        
     # Crea una nuova immagine con sfondo nero per visualizzare 'coords'
     black_image = np.zeros((display_height, display_width), dtype=np.uint8)
-    
+        
     # Disegna sui pixel dell'immagine (deve essere B&W) i nodi e gli archi del grafo.
     sknw.draw_graph(black_image, graph)
     
     rgb_image = cv2.cvtColor(black_image, cv2.COLOR_GRAY2BGR)
     
+    # Drawing the idealPath
     for y, x in coords:
         if 0 <= y < rgb_image.shape[0] and 0 <= x < rgb_image.shape[1]:
             rgb_image[y, x] = (0, 255, 0)
     
+    # Drawing the startNode
+    for y, x in graph.nodes[startNodeIdx]['pts']:
+        if 0 <= y < rgb_image.shape[0] and 0 <= x < rgb_image.shape[1]:
+            rgb_image[y, x] = (255, 0, 0) # Start node is colored RED
+    
+    # Drawing the endNode
+    for y, x in graph.nodes[endNodeIdx]['pts']:
+        if 0 <= y < rgb_image.shape[0] and 0 <= x < rgb_image.shape[1]:
+            rgb_image[y, x] = (0, 0, 255) # End node is colored BLUE
+    
+    # Drawing the userStart
+    for i in range(-2, 2):
+        # Giving a 2 px width to the line
+        for j in range(1):
+            pixelX = userStart[0] + i + j # Applying the horizontal offset
+            pixelY = userStart[1] + i + j # Applying the vertical offset
+            if pixelX > 0 and pixelX < display_width:
+                rgb_image[userStart[1], pixelX] = (255, 255, 0)
+            if pixelY > 0 and pixelY < display_height:
+                rgb_image[pixelY, userStart[0]] = (255, 255, 0)
+    
+    # Drawing the userEnd
+    for i in range(-2, 2):
+        pixelX = userEnd[0] + i # Applying the horizontal offset
+        pixelY = userEnd[1] + i # Applying the vertical offset
+        if pixelX > 0 and pixelX < display_width:
+            rgb_image[userEnd[1], pixelX] = (255, 255, 0)
+        if pixelY > 0 and pixelY < display_height:
+            rgb_image[pixelY, userEnd[0]] = (0, 255, 255)
     
     cv2.imshow('VIII. Graph', rgb_image)
     
@@ -194,25 +227,57 @@ while uInput != "quit":
     # ============= Input Polling =============
     if key == ord('q'):
         break
-    elif key == ord('w'):
+    elif key == ord('p'):
+        if isImageProcessingPaused:
+            isImageProcessingPaused = False
+        else:
+            isImageProcessingPaused = True
+    elif key == ord('1'):
         d += 1
-    elif key == ord('s'):
+    elif key == ord('2'):
         if d > 1:
             d -= 1
-    elif key == ord('e'):
+    elif key == ord('3'):
         sigmaColor += 5
-    elif key == ord('d'):
+    elif key == ord('4'):
         sigmaColor -= 5
-    elif key == ord('r'):
+    elif key == ord('5'):
         sigmaSpace += 5
-    elif key == ord('f'):
+    elif key == ord('6'):
         sigmaSpace -= 5
-    elif key == ord('t'):
+    elif key == ord('7'):
         if darkestPixelPercentage < 99:
             darkestPixelPercentage += 1
-    elif key == ord('g'):
+    elif key == ord('8'):
         if darkestPixelPercentage > 1:
             darkestPixelPercentage -= 1
+    elif key == ord('w'):
+        # Goes up if it would stay inside the image
+        if userStart[1]<display_height:
+            userStart[1] -= 1
+    elif key == ord('a'):
+        if userStart[0]>0:
+            userStart[0] -= 1
+    elif key == ord('s'):
+        if userStart[1]>0:
+            userStart[1] += 1
+    elif key == ord('d'):
+        if userStart[0]<display_width:
+            userStart[0] += 1
+    elif key == ord('i'):
+        # Goes up if it would stay inside the image
+        if userEnd[1]<display_height:
+            userEnd[1] -= 1
+    elif key == ord('j'):
+        if userEnd[0]>0:
+            userEnd[0] -= 1
+    elif key == ord('k'):
+        if userEnd[1]>0:
+            userEnd[1] += 1
+    elif key == ord('l'):
+        if userEnd[0]<display_width:
+            userEnd[0] += 1
+            
 
 # ============= Destroy windows =============
 cv2.destroyAllWindows()
