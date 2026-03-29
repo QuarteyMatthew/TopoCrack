@@ -133,33 +133,90 @@ while uInput != "quit":
 
         # Ricerca del percorso più lungo tra endpoints
         ideal_path = [] # La lista dei nodi del path più lungo
-        longest_length = 0
 
-        # Ottiene la lista delle distanze tra i nodi del grafo e il punto indicato dall'utente
-        startCandidatesNorms = []
-        for n in graph.nodes():
-            startCandidatesNorms.append(np.linalg.norm(graph.nodes[n]['o'] - [userStart[1], userStart[0]]))
-        # Finds the index corresponding to the closest node to the userStart
-        startNodeIdx = startCandidatesNorms.index(min(startCandidatesNorms))
+        # copia del grafo
+        tempGraph = graph.copy()
+
+        minimumDistancesSum = np.inf
+        startNodeIdx = None
         endNodeIdx = None
 
-        # Trova la componente connessa di startNodeIdx
-        component = nx.node_connected_component(graph, startNodeIdx)
+        # finché ci sono nodi in 'tempGraph'
+        while tempGraph.number_of_nodes() > 0:
+            # prendi un nodo qualsiasi presente in 'tempGraph'
+            any_node = next(iter(tempGraph.nodes()))
+            # ottieni l'insieme dei nodi della componente connessa che contiene il nodo 'any_node'
+            comp_set = nx.node_connected_component(tempGraph, any_node)
+            # trasformalo in lista per indicizzazione ordinata
+            comp_nodes = list(comp_set)
 
-        # filtra solo i nodi della stessa componente
-        valid_targets = [n for n in component]
+            # rimuovi la componente dal grafo temporaneo
+            tempGraph.remove_nodes_from(comp_set)
+
+            # se la componente ha meno di 2 nodi non ha senso cercare coppie
+            if len(comp_nodes) < 2:
+                continue
+
+            # calcola la somma minima delle distanze tra due nodi della componente e i due punti utente
+            # userStart/userEnd sono [x, y] (col, row) -> convertiamo in [row, col] per confrontare con data['o']
+            userStart_rc = np.array([userStart[1], userStart[0]])
+            userEnd_rc   = np.array([userEnd[1],   userEnd[0]])
+
+            for i in range(len(comp_nodes) - 1):
+                # Il nodo del componente in 'i'
+                ni = comp_nodes[i]
+                # Il centroide del nodo 'ni'
+                oi = np.asarray(graph.nodes[ni]['o'], dtype=float)
+
+                # Compara il nodo 'ni' con tutti gli altri nodi del componente
+                for j in range(i + 1, len(comp_nodes)):
+                    # Il nodo del componente in 'j'
+                    nj = comp_nodes[j]
+                    # Il centroide del nodo 'nj'
+                    oj = np.asarray(graph.nodes[nj]['o'], dtype=float)
+
+                    # due possibili accoppiamenti: (ni->userStart, nj->userEnd) o scambiati
+                    sum1 = np.linalg.norm(oi - userStart_rc) + np.linalg.norm(oj - userEnd_rc)
+                    sum2 = np.linalg.norm(oi - userEnd_rc)   + np.linalg.norm(oj - userStart_rc)
+                    tempDistancesSum = min(sum1, sum2)
+
+                    if tempDistancesSum < minimumDistancesSum:
+                        minimumDistancesSum = tempDistancesSum
+                        # scegli quale nodo corrisponde a start/end in base al min scelto
+                        if sum1 <= sum2:
+                            startNodeIdx = ni
+                            endNodeIdx = nj
+                        else:
+                            startNodeIdx = nj
+                            endNodeIdx = ni
         
-        if startNodeIdx in valid_targets:
-            # Toglie il nodo di partenza dai nodi candidati per non avere lo stesso nodo per start e end
-            valid_targets.remove(startNodeIdx)
+        ideal_path = nx.shortest_path(graph, startNodeIdx, endNodeIdx, weight='weight')
+        
+        # # Ottiene la lista delle distanze tra i nodi del grafo e il punto indicato dall'utente
+        # startCandidatesNorms = []
+        # for n in graph.nodes():
+        #     startCandidatesNorms.append(np.linalg.norm(graph.nodes[n]['o'] - [userStart[1], userStart[0]]))
+        # # Finds the index corresponding to the closest node to the userStart
+        # startNodeIdx = startCandidatesNorms.index(min(startCandidatesNorms))
+        # endNodeIdx = None
 
-        # Trova il nodo collegato allo start con la distanza (la norma) minima dal punto indicato dall'utente
-        endNodeIdx = min(valid_targets, key=lambda n: np.linalg.norm(graph.nodes[n]['o'] - [userEnd[1], userEnd[0]]))
+        # # Trova la componente connessa di startNodeIdx
+        # component = nx.node_connected_component(graph, startNodeIdx)
 
-        # Il percorso più corto tra i due nodi collegati trovati
-        # (il nodo start è il piu vicino al punto indicato dall'utente, mentre il nodo end è
-        # il più vicino al punto indicato dall'utente che è collegato al nodo di start).
-        ideal_path = nx.shortest_path(graph, startNodeIdx, endNodeIdx, weight='weight') 
+        # # filtra solo i nodi della stessa componente
+        # valid_targets = [n for n in component]
+        
+        # if startNodeIdx in valid_targets:
+        #     # Toglie il nodo di partenza dai nodi candidati per non avere lo stesso nodo per start e end
+        #     valid_targets.remove(startNodeIdx)
+
+        # # Trova il nodo collegato allo start con la distanza (la norma) minima dal punto indicato dall'utente
+        # endNodeIdx = min(valid_targets, key=lambda n: np.linalg.norm(graph.nodes[n]['o'] - [userEnd[1], userEnd[0]]))
+
+        # # Il percorso più corto tra i due nodi collegati trovati
+        # # (il nodo start è il piu vicino al punto indicato dall'utente, mentre il nodo end è
+        # # il più vicino al punto indicato dall'utente che è collegato al nodo di start).
+        # ideal_path = nx.shortest_path(graph, startNodeIdx, endNodeIdx, weight='weight') 
 
         # Resets 'coords'
         coords = []
