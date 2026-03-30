@@ -17,7 +17,7 @@ print("Width:", img_width, "\nHeight:", img_height)
 img_ratio = img_width/img_height
 print("Image ratio:", img_ratio)
 # Dynamic size for both vertical and horizontal images
-max_display_length = 800
+max_display_length = 600
 if img_ratio > 1:
     display_width, display_height = int(max_display_length), int(max_display_length/img_ratio)
 else:
@@ -82,12 +82,12 @@ while uInput != "quit":
         upper1 = 1.33 * median1
         thresholds1 = [lower1, upper1]
         canned_img_1 = cv2.Canny(result, int(thresholds1[0]), int(thresholds1[1]))
-        # cv2.imshow('IV. Edges 1 - Canny', canned_img_1)
+        cv2.imshow('IV. Edges 1 - Canny', canned_img_1)
 
         # ============= Closing Morphology Image =============
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
         closed_img_1 = cv2.morphologyEx(canned_img_1, cv2.MORPH_CLOSE, kernel)
-        # cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
+        cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
 
         # ============= To Binary Image =============
         # Ora binarizza (è già quasi binaria, ma per sicurezza)
@@ -109,8 +109,8 @@ while uInput != "quit":
         # Converti in uint8 per OpenCV: True→255, False→0
         # 'astype(np.uint8)' converte i valori booleani della maschera in 0/1 interi
         # moltiplicando per 255 si ottiene un immagine in scala di grigi
-        # skele_img_display = skele_img_1.astype(np.uint8) * 255
-        # cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
+        skele_img_display = skele_img_1.astype(np.uint8) * 255
+        cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
         
         # ============= Find Main Path =============
         # 'build_sknw' è la funzione che:
