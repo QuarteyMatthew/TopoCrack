@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import skimage as sk
 import networkx as nx
-import sknw_patched as sknw
+import Backend.test.openCV.sknw_patched as sknw
 
 # Ricava la cartella di esecuzione di questo script
 script_dir = Path(__file__).resolve().parent
