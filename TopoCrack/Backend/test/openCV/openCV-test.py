@@ -17,7 +17,7 @@ print("Width:", img_width, "\nHeight:", img_height)
 img_ratio = img_width/img_height
 print("Image ratio:", img_ratio)
 # Dynamic size for both vertical and horizontal images
-max_display_length = 800
+max_display_length = 600
 if img_ratio > 1:
     display_width, display_height = int(max_display_length), int(max_display_length/img_ratio)
 else:
@@ -38,7 +38,11 @@ clahe_img_1 = np.clip(clahe1.apply(img), 0, 255).astype(np.uint8)
 d = 9
 sigmaColor = sigmaSpace = 120
 # ============= Bilateral Filtering Params =============
-darkestPixelPercentage = 25
+darkestPixelPercentageBilateral = 25
+
+# ============= MorphologyEx Params =============
+anchor = 3;
+darkestPixelPercentageCanny = 5
 
 uInput = ""
 print("1=>d+=1; 2=>d-=1; 3=>sigmaColor+=5; 4=>sigmaColor-=5;\
@@ -58,36 +62,53 @@ graph = None
 # Main Loop
 while uInput != "quit":
     if not isImageProcessingPaused:
-        print(f"d={d}; sigmaColor={sigmaColor}; sigmaSpace={sigmaSpace}; darkPerc={darkestPixelPercentage}")
+        print(f"d={d}; sigmaColor={sigmaColor}; sigmaSpace={sigmaSpace}; darkPercBilateral={darkestPixelPercentageBilateral}; darkPercCanny={darkestPixelPercentageCanny}; anchor={anchor}")
         
         # ============= Bilateral Filtered Image =============
         filtered_img_1 = cv2.bilateralFilter(clahe_img_1, d, sigmaColor, sigmaSpace)
-        # cv2.imshow('III. Filtered 1 - Bilateral', filtered_img_1)
+        cv2.imshow('III.a. Filtered 1 - Bilateral', filtered_img_1)
 
-        # ============= Brightness Flattening =============
-        threshold_percentile = np.percentile(filtered_img_1, darkestPixelPercentage)  # valore sotto cui cade il 20% più scuro
+        # ============= Brightness Flattening on Bilater Filter's result =============
+        threshold_percentile1 = np.percentile(filtered_img_1, darkestPixelPercentageBilateral)  # valore sotto cui cade il 20% più scuro
 
         # Il pixel più scuro tra l'80% più chiaro
-        background_value = filtered_img_1[filtered_img_1 > threshold_percentile].min()
+        background_value1 = filtered_img_1[filtered_img_1 > threshold_percentile1].min()
 
-        result = filtered_img_1.copy()
-        result[filtered_img_1 > threshold_percentile] = background_value
+        result1 = filtered_img_1.copy()
 
-        # cv2.imshow('Percentile filter', result)
+        # 
+        result1[filtered_img_1 > threshold_percentile1] = background_value1
+
+        cv2.imshow('III.b. Darkest 25%', result1)
 
         # ============= Edge Detection Image (Canny) =============
         # Dopo il bilateral filter, Canny invece di threshold diretta
-        median1 = np.median(result.flatten())
+        median1 = np.median(result1.flatten()) # Fa divetare l'immagine un'array
         lower1 = 0.66 * median1
         upper1 = 1.33 * median1
         thresholds1 = [lower1, upper1]
-        canned_img_1 = cv2.Canny(result, int(thresholds1[0]), int(thresholds1[1]))
-        # cv2.imshow('IV. Edges 1 - Canny', canned_img_1)
+
+        canned_img_1 = cv2.Canny(result1, int(thresholds1[0]), int(thresholds1[1]))
+        cv2.imshow('IV.a. Edges 1 - Canny', canned_img_1)
+
+        # =============  =============
+        threshold_percentile2 = np.percentile(filtered_img_1, darkestPixelPercentageCanny)  # valore sotto cui cade il 5% più scuro
+
+        # # Il pixel più scuro tra l'95% più chiaro
+        # background_value2 = filtered_img_1[filtered_img_1 > threshold_percentile2].min()
+
+        result2 = canned_img_1.copy()
+        result2[filtered_img_1 < threshold_percentile2] = 255
+
+        cv2.imshow('IV.b. Darkest 5%', result2)
+
+        # =============  =============
+
 
         # ============= Closing Morphology Image =============
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
-        closed_img_1 = cv2.morphologyEx(canned_img_1, cv2.MORPH_CLOSE, kernel)
-        # cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (anchor, anchor))
+        closed_img_1 = cv2.morphologyEx(result2, cv2.MORPH_CLOSE, kernel)
+        cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
 
         # ============= To Binary Image =============
         # Ora binarizza (è già quasi binaria, ma per sicurezza)
@@ -109,8 +130,8 @@ while uInput != "quit":
         # Converti in uint8 per OpenCV: True→255, False→0
         # 'astype(np.uint8)' converte i valori booleani della maschera in 0/1 interi
         # moltiplicando per 255 si ottiene un immagine in scala di grigi
-        # skele_img_display = skele_img_1.astype(np.uint8) * 255
-        # cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
+        skele_img_display = skele_img_1.astype(np.uint8) * 255
+        cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
         
         # ============= Find Main Path =============
         # 'build_sknw' è la funzione che:
@@ -307,11 +328,22 @@ while uInput != "quit":
     elif key == ord('6'):
         sigmaSpace -= 5
     elif key == ord('7'):
-        if darkestPixelPercentage < 99:
-            darkestPixelPercentage += 1
+        if darkestPixelPercentageBilateral < 99:
+            darkestPixelPercentageBilateral += 1
     elif key == ord('8'):
-        if darkestPixelPercentage > 1:
-            darkestPixelPercentage -= 1
+        if darkestPixelPercentageBilateral > 1:
+            darkestPixelPercentageBilateral -= 1
+    elif key == ord('e'):
+        if darkestPixelPercentageCanny < 99:
+            darkestPixelPercentageCanny += 1
+    elif key == ord('r'):
+        if darkestPixelPercentageCanny > 1:
+            darkestPixelPercentageCanny -= 1
+    elif key == ord('9'):
+        anchor += 1
+    elif key == ord('0'):
+        if anchor > 1:
+            anchor -= 1
     elif key == ord('w'):
         # Goes up if it would stay inside the image
         if userStart[1]>1:
