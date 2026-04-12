@@ -317,7 +317,7 @@ def color_for_section(feat_idx, section_idx, cmap='hsv'):
 coast = gpd.read_file("./ne_data/ne_50m_coastline/ne_50m_coastline.shp")
 
 # Configuration: divide coastlines into 50 km sections
-SECTION_LENGTH_M = 500_000  # 1000 km geodetic distance
+SECTION_LENGTH_M = 500_000  # 500 km geodetic distance
 
 # Step 1: Split all coastlines into geodetic sections
 print("Dividing coastlines into sections...")
@@ -325,7 +325,7 @@ sections_gdf = explode_to_sections(coast, section_length_m=SECTION_LENGTH_M)
 
 # Step 2: Normalize each section to canonical [0,1] coordinate space
 print("Normalizing sections...")
-normalized = normalize_all_sections(sections_gdf, n_points=100)
+normalized = normalize_all_sections(sections_gdf, n_points=5)
 
 # Step 3: Generate deterministic colors for each section
 colors = [color_for_section(item['feat_idx'], item['section_idx']) for item in normalized]
