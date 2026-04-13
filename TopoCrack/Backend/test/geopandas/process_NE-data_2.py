@@ -15,6 +15,7 @@ from shapely.geometry import LineString
 from shapely.ops import linemerge
 from pyproj import CRS, Geod
 from functools import lru_cache
+from pyproj import Transformer
 
 # Initialize Geod calculator using WGS84 ellipsoid (realistic Earth model)
 geod = Geod(ellps="WGS84")
@@ -65,76 +66,86 @@ def interpolate_geodetic(coords: list, distance_m: float) -> tuple:
     # If we've exhausted the line, return the endpoint
     return coords[-1]
 
+# =================================================================================================================
+# TODO: aggiungere un parametro che controlla la lunghezza minima delle sezioni al posto che calcolaro staticamente
+# =================================================================================================================
 def split_line_geodetic(line: LineString, section_length_m: float) -> list:
-    """
-    Divide a coastline into sections of fixed geodetic length.
-    
-    If shorter than section_length_m, returns entire line as a single section.
-    Handles MultiLineString by recursively splitting each part.
-    
-    Args:
-        line: Shapely LineString or MultiLineString in WGS84
-        section_length_m: Target length for each section in meters
-    
-    Returns:
-        List of dicts with keys: geometry, section_idx, start_coord, end_coord, length_m
-    """
-    # Handle empty or null geometries
     if line is None or line.is_empty:
         return []
 
-    # Handle MultiLineString: split each component separately
     if line.geom_type == 'MultiLineString':
-        line = linemerge(line)  # Try to merge into single LineString
-        if line.geom_type == 'MultiLineString':  # If still multiple pieces after merge
+        line = linemerge(line)
+        if line.geom_type == 'MultiLineString':
             sections = []
             for part in line.geoms:
                 sections.extend(split_line_geodetic(part, section_length_m))
             return sections
 
-    # Calculate total length of this line
     total_length = geodetic_length(line)
     coords = list(line.coords)
 
-    # Pre-calculate cumulative distance at each vertex (optimization)
-    # This avoids recalculating distances repeatedly
+    # Discard sections shorter than 1/10 of section_length_m
+    min_length_m = section_length_m / 10
+    if total_length < min_length_m:
+        return []
+
+    # Pre-calculate cumulative vertex distances
     vertex_dists = [0.0]
     for i in range(len(coords) - 1):
         _, _, seg_len = geod.inv(*coords[i], *coords[i + 1])
         vertex_dists.append(vertex_dists[-1] + seg_len)
 
-    # If line is shorter than section_length_m, treat it as a single section
+    # Short-but-valid coastline: split in half to capture both sides
+    # (e.g. small islands that are shorter than section_length_m but still meaningful)
     if total_length < section_length_m:
-        return [{
-            'geometry':    line,
-            'section_idx': 0,
-            'start_coord': coords[0],
-            'end_coord':   coords[-1],
-            'length_m':    total_length,
-        }]
+        mid_dist = total_length / 2
+        mid_pt   = interpolate_geodetic(coords, mid_dist)
 
-    # Calculate how many full sections fit in this line
+        # First half: from start to midpoint
+        inner_first = [coords[0]]
+        for vd, coord in zip(vertex_dists, coords):
+            if 0 < vd < mid_dist:
+                inner_first.append(coord)
+        inner_first.append(mid_pt)
+
+        # Second half: from midpoint to end
+        inner_second = [mid_pt]
+        for vd, coord in zip(vertex_dists, coords):
+            if mid_dist < vd < total_length:
+                inner_second.append(coord)
+        inner_second.append(coords[-1])
+
+        return [
+            {
+                'geometry':    LineString(inner_first),
+                'section_idx': 0,
+                'start_coord': coords[0],
+                'end_coord':   mid_pt,
+                'length_m':    mid_dist,
+            },
+            {
+                'geometry':    LineString(inner_second),
+                'section_idx': 1,
+                'start_coord': mid_pt,
+                'end_coord':   coords[-1],
+                'length_m':    total_length - mid_dist,
+            },
+        ]
+
     n_full_sections = int(total_length // section_length_m)
-
-    # Create sections
     sections = []
+
     for i in range(n_full_sections):
-        # Calculate start and end distance for this section
         start_dist = i * section_length_m
         end_dist   = start_dist + section_length_m
 
-        # Interpolate exact start and end points at geodetic distances
         start_pt = interpolate_geodetic(coords, start_dist)
         end_pt   = interpolate_geodetic(coords, end_dist)
 
-        # Build section geometry: start → [intermediate vertices] → end
         inner = [start_pt]
-        
-        # Include any original vertices that fall inside this section
-        for j, (vd, coord) in enumerate(zip(vertex_dists, coords)):
+        for vd, coord in zip(vertex_dists, coords):
             if start_dist < vd < end_dist:
                 inner.append(coord)
-        
         inner.append(end_pt)
 
         sections.append({
@@ -143,6 +154,28 @@ def split_line_geodetic(line: LineString, section_length_m: float) -> list:
             'start_coord': start_pt,
             'end_coord':   end_pt,
             'length_m':    section_length_m,
+        })
+
+    # Handle the remainder after the last full section
+    remainder_start = n_full_sections * section_length_m
+    remainder_length = total_length - remainder_start
+
+    if remainder_length >= min_length_m:
+        start_pt = interpolate_geodetic(coords, remainder_start)
+        end_pt   = coords[-1]
+
+        inner = [start_pt]
+        for vd, coord in zip(vertex_dists, coords):
+            if remainder_start < vd < total_length:
+                inner.append(coord)
+        inner.append(end_pt)
+
+        sections.append({
+            'geometry':    LineString(inner),
+            'section_idx': n_full_sections,
+            'start_coord': start_pt,
+            'end_coord':   end_pt,
+            'length_m':    remainder_length,
         })
 
     return sections
@@ -325,70 +358,64 @@ sections_gdf = explode_to_sections(coast, section_length_m=SECTION_LENGTH_M)
 
 # Step 2: Normalize each section to canonical [0,1] coordinate space
 print("Normalizing sections...")
-normalized = normalize_all_sections(sections_gdf, n_points=5)
+normalized = normalize_all_sections(sections_gdf, n_points=20)
+
+# ======================== VISUALIZATION ========================
 
 # Step 3: Generate deterministic colors for each section
 colors = [color_for_section(item['feat_idx'], item['section_idx']) for item in normalized]
 
-# Step 4: Create visualization with 3 subplots
 print("Creating visualization...")
-fig, axes = plt.subplots(1, 3, figsize=(22, 6))
+fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
 # --- Plot 1: Original coastlines (WGS84 coordinates) ---
 coast.plot(ax=axes[0], color='steelblue', lw=0.5)
 axes[0].set_title("Costa originale (WGS84)")
 axes[0].set_aspect('equal')
 
-# --- Plot 2: All sections normalized and overlaid ---
-# This shows how similar all the patterns are when scaled uniformly
-for item, color in zip(normalized, colors):
-    if item['pts'] is not None:
-        axes[1].plot(item['pts'][:, 0], item['pts'][:, 1],
-                     alpha=0.4, lw=0.6, color=color, rasterized=True)
-
-# Add reference line at y=0 (where coast should pass through)
-axes[1].axhline(0, color='red', lw=1, ls='--', label='y = 0 (start / end)')
-axes[1].scatter([0, 1], [0, 0], color='red', zorder=5)
-axes[1].set_xlim(-0.05, 1.05)
-axes[1].set_xlabel("x normalizzato  [0 = start, 1 = end]")
-axes[1].set_ylabel("y  (deviazione laterale relativa)")
-axes[1].set_title(f"Sezioni normalizzate ({len(normalized)} sezioni da {SECTION_LENGTH_M/1000:.0f} km)")
-axes[1].legend(loc='upper left')
-
-# --- Plot 3: Sections repositioned back in WGS84 ---
-# Shows the geographic distribution of sections
-coast.plot(ax=axes[2], color='lightgray', lw=0.4, zorder=1)
+# --- Plot 2: Sections reprojected back to WGS84 ---
+# Fix: invert the normalization in UTM space (meters), then convert to WGS84.
+# Doing it in lon/lat space (as before) causes severe distortion near the poles
+# because degrees of longitude shrink dramatically at high latitudes.
+coast.plot(ax=axes[1], color='lightgray', lw=0.4, zorder=1)
 
 for item, color in zip(normalized, colors):
     if item['pts'] is None:
         continue
-    
-    # Get original start and end points
-    start = np.array(item['start_coord'])
-    end   = np.array(item['end_coord'])
-    
-    # Calculate transformation to restore geographic coordinates
-    chord_vec = end - start  # Vector from start to end
-    chord_len = np.linalg.norm(chord_vec)  # Distance from start to end
-    angle = np.arctan2(chord_vec[1], chord_vec[0])  # Angle of the vector
-    
-    # Build inverse rotation matrix to undo the normalization rotation
-    c, s = np.cos(angle), np.sin(angle)
+
+    start_lonlat = item['start_coord']
+    end_lonlat   = item['end_coord']
+
+    # Use the same UTM zone that was used during normalization
+    lon_center = (start_lonlat[0] + end_lonlat[0]) / 2
+    utm_crs = utm_crs_for_lon(lon_center)
+
+    to_utm  = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True)
+    to_wgs  = Transformer.from_crs(utm_crs, "EPSG:4326", always_xy=True)
+
+    # Convert start and end to UTM (meters) — same space the normalization used
+    start_utm = np.array(to_utm.transform(start_lonlat[0], start_lonlat[1]))
+    end_utm   = np.array(to_utm.transform(end_lonlat[0],   end_lonlat[1]))
+
+    chord_vec = end_utm - start_utm
+    chord_len = np.linalg.norm(chord_vec)
+    angle     = np.arctan2(chord_vec[1], chord_vec[0])
+
+    c, s  = np.cos(angle), np.sin(angle)
     R_inv = np.array([[c, -s], [s, c]])
-    
-    # Transform normalized points back to geographic coordinates:
-    # 1. Scale by chord length (undo x-normalization)
-    # 2. Rotate back to original orientation
-    # 3. Translate to original start position
-    pts_geo = (R_inv @ (item['pts'] * chord_len).T).T + start
-    
-    axes[2].plot(pts_geo[:, 0], pts_geo[:, 1], lw=1.0, alpha=0.6, color=color, rasterized=True)
 
-axes[2].set_title("Sezioni riposizionate (WGS84)")
-axes[2].set_aspect('equal')
-axes[2].set_xlabel("Longitudine")
-axes[2].set_ylabel("Latitudine")
+    # 1. Scale by UTM chord length  2. Rotate back  3. Translate to UTM start
+    pts_utm = (R_inv @ (item['pts'] * chord_len).T).T + start_utm
 
-# Adjust spacing and display
+    # Convert UTM coordinates back to WGS84 lon/lat
+    lons, lats = to_wgs.transform(pts_utm[:, 0], pts_utm[:, 1])
+
+    axes[1].plot(lons, lats, lw=1.0, alpha=0.6, color=color, rasterized=True)
+
+axes[1].set_title("Sezioni riposizionate (WGS84)")
+axes[1].set_aspect('equal')
+axes[1].set_xlabel("Longitudine")
+axes[1].set_ylabel("Latitudine")
+
 plt.tight_layout()
 plt.show()
