@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import skimage as sk
 import networkx as nx
-import Backend.test.openCV.sknw_patched as sknw
+import sknw_patched as sknw
 
 # Ricava la cartella di esecuzione di questo script
 script_dir = Path(__file__).resolve().parent
@@ -255,6 +255,8 @@ while uInput != "quit":
 
         # Conversione della lista in un array NumPy
         coords = np.array(coords)
+        
+        print(f"Coords of ideal path:\n{coords}")
         
     # Crea una nuova immagine con sfondo nero per visualizzare 'coords'
     black_image = np.zeros((display_height, display_width), dtype=np.uint8)

@@ -11,11 +11,13 @@ This script:
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
-from shapely.geometry import LineString
+from shapely.geometry import LineString, box
 from shapely.ops import linemerge
 from pyproj import CRS, Geod
 from functools import lru_cache
 from pyproj import Transformer
+
+import pickle
 
 # Initialize Geod calculator using WGS84 ellipsoid (realistic Earth model)
 geod = Geod(ellps="WGS84")
@@ -84,8 +86,8 @@ def split_line_geodetic(line: LineString, section_length_m: float) -> list:
     total_length = geodetic_length(line)
     coords = list(line.coords)
 
-    # Discard sections shorter than 1/10 of section_length_m
-    min_length_m = section_length_m / 10
+    # Discard sections shorter than 1/5 of section_length_m
+    min_length_m = section_length_m / 5
     if total_length < min_length_m:
         return []
 
@@ -343,14 +345,18 @@ def color_for_section(feat_idx, section_idx, cmap='hsv'):
     return plt.colormaps[cmap](value)
 
 
-# ======================== MAIN ========================
+# ======================== LOAD GEO. DATA ========================
 # Load and process coastline data
 
 # Load Natural Earth coastline data (already in WGS84, EPSG:4326)
-coast = gpd.read_file("./ne_data/ne_50m_coastline/ne_50m_coastline.shp")
+coast = gpd.read_file("./ne_data/ne_10m_coastline/ne_10m_coastline.shp")
+
+# Ritaglia esattamente alla bounding box (lon_min, lat_min, lon_max, lat_max)
+bbox_italia = (5.93, 34.76, 18.99, 47.10)
+coast = coast.clip(box(*bbox_italia)).reset_index(drop=True)
 
 # Configuration: divide coastlines into 50 km sections
-SECTION_LENGTH_M = 500_000  # 500 km geodetic distance
+SECTION_LENGTH_M = 50_000  # 5 km geodetic distance
 
 # Step 1: Split all coastlines into geodetic sections
 print("Dividing coastlines into sections...")
@@ -358,14 +364,26 @@ sections_gdf = explode_to_sections(coast, section_length_m=SECTION_LENGTH_M)
 
 # Step 2: Normalize each section to canonical [0,1] coordinate space
 print("Normalizing sections...")
-normalized = normalize_all_sections(sections_gdf, n_points=20)
+normalized = normalize_all_sections(sections_gdf, n_points=50)
+
+
+# ======================== SAVING PROCESSED DATA ========================
+
+save_path = "normalized_sections/n_s_1.pk1"
+print(f"Saving normalized sectins file in '{save_path}'...")
+
+# Save data as pickle file (preserves numpy arrays exactly by saving in binary)
+with open(save_path, 'wb') as f:
+    pickle.dump(normalized, f)
+
 
 # ======================== VISUALIZATION ========================
+
+print("Creating visualization...")
 
 # Step 3: Generate deterministic colors for each section
 colors = [color_for_section(item['feat_idx'], item['section_idx']) for item in normalized]
 
-print("Creating visualization...")
 fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
 # --- Plot 1: Original coastlines (WGS84 coordinates) ---
