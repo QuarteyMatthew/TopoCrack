@@ -4,10 +4,15 @@ import numpy as np
 import skimage as sk
 import networkx as nx
 import sknw_patched as sknw
+import pickle
 
 # Ricava la cartella di esecuzione di questo script
 script_dir = Path(__file__).resolve().parent
 print(script_dir)
+
+# Il percorso dove salva il percorso ideale
+ideal_path_saving_path = "../dtw/example_line_Y-X.bin"
+
 # ============= Original Image =============
 img = cv2.imread(f'{script_dir}/img/crack01.jpg', cv2.IMREAD_GRAYSCALE)
 
@@ -26,7 +31,7 @@ else:
 img = cv2.resize(img, (display_width, display_height))
 
 # Show original image
-cv2.imshow('I. Crack 01 - B/W', img)
+# cv2.imshow('I. Crack 01 - B/W', img)
 
 # ============= CLACHE Image =============
 clahe1 = cv2.createCLAHE(clipLimit=3)
@@ -66,7 +71,7 @@ while uInput != "quit":
         
         # ============= Bilateral Filtered Image =============
         filtered_img_1 = cv2.bilateralFilter(clahe_img_1, d, sigmaColor, sigmaSpace)
-        cv2.imshow('III.a. Filtered 1 - Bilateral', filtered_img_1)
+        # cv2.imshow('III.a. Filtered 1 - Bilateral', filtered_img_1)
 
         # ============= Brightness Flattening on Bilater Filter's result =============
         threshold_percentile1 = np.percentile(filtered_img_1, darkestPixelPercentageBilateral)  # valore sotto cui cade il 20% più scuro
@@ -79,7 +84,7 @@ while uInput != "quit":
         # 
         result1[filtered_img_1 > threshold_percentile1] = background_value1
 
-        cv2.imshow('III.b. Darkest 25%', result1)
+        # cv2.imshow('III.b. Darkest 25%', result1)
 
         # ============= Edge Detection Image (Canny) =============
         # Dopo il bilateral filter, Canny invece di threshold diretta
@@ -89,7 +94,7 @@ while uInput != "quit":
         thresholds1 = [lower1, upper1]
 
         canned_img_1 = cv2.Canny(result1, int(thresholds1[0]), int(thresholds1[1]))
-        cv2.imshow('IV.a. Edges 1 - Canny', canned_img_1)
+        # cv2.imshow('IV.a. Edges 1 - Canny', canned_img_1)
 
         # =============  =============
         threshold_percentile2 = np.percentile(filtered_img_1, darkestPixelPercentageCanny)  # valore sotto cui cade il 5% più scuro
@@ -100,7 +105,7 @@ while uInput != "quit":
         result2 = canned_img_1.copy()
         result2[filtered_img_1 < threshold_percentile2] = 255
 
-        cv2.imshow('IV.b. Darkest 5%', result2)
+        # cv2.imshow('IV.b. Darkest 5%', result2)
 
         # =============  =============
 
@@ -108,7 +113,7 @@ while uInput != "quit":
         # ============= Closing Morphology Image =============
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (anchor, anchor))
         closed_img_1 = cv2.morphologyEx(result2, cv2.MORPH_CLOSE, kernel)
-        cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
+        # cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
 
         # ============= To Binary Image =============
         # Ora binarizza (è già quasi binaria, ma per sicurezza)
@@ -131,7 +136,7 @@ while uInput != "quit":
         # 'astype(np.uint8)' converte i valori booleani della maschera in 0/1 interi
         # moltiplicando per 255 si ottiene un immagine in scala di grigi
         skele_img_display = skele_img_1.astype(np.uint8) * 255
-        cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
+        # cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
         
         # ============= Find Main Path =============
         # 'build_sknw' è la funzione che:
@@ -214,53 +219,47 @@ while uInput != "quit":
                             endNodeIdx = ni
         
         ideal_path = nx.shortest_path(graph, startNodeIdx, endNodeIdx, weight='weight')
-        
-        # # Ottiene la lista delle distanze tra i nodi del grafo e il punto indicato dall'utente
-        # startCandidatesNorms = []
-        # for n in graph.nodes():
-        #     startCandidatesNorms.append(np.linalg.norm(graph.nodes[n]['o'] - [userStart[1], userStart[0]]))
-        # # Finds the index corresponding to the closest node to the userStart
-        # startNodeIdx = startCandidatesNorms.index(min(startCandidatesNorms))
-        # endNodeIdx = None
-
-        # # Trova la componente connessa di startNodeIdx
-        # component = nx.node_connected_component(graph, startNodeIdx)
-
-        # # filtra solo i nodi della stessa componente
-        # valid_targets = [n for n in component]
-        
-        # if startNodeIdx in valid_targets:
-        #     # Toglie il nodo di partenza dai nodi candidati per non avere lo stesso nodo per start e end
-        #     valid_targets.remove(startNodeIdx)
-
-        # # Trova il nodo collegato allo start con la distanza (la norma) minima dal punto indicato dall'utente
-        # endNodeIdx = min(valid_targets, key=lambda n: np.linalg.norm(graph.nodes[n]['o'] - [userEnd[1], userEnd[0]]))
-
-        # # Il percorso più corto tra i due nodi collegati trovati
-        # # (il nodo start è il piu vicino al punto indicato dall'utente, mentre il nodo end è
-        # # il più vicino al punto indicato dall'utente che è collegato al nodo di start).
-        # ideal_path = nx.shortest_path(graph, startNodeIdx, endNodeIdx, weight='weight') 
 
         # Resets 'coords'
         coords = []
 
-        # Vengono estratte le coordinate dei punti che compongono il percorso trovato:
-        # 'range' returns a range from start (def. 0) to stop (here the length of
-        # longest_path - 1)
         for i in range(len(ideal_path) - 1):
-            # Estrae dal grafo un nodo e il nodo ad esso consecutivo
-            edge = graph[ideal_path[i]][ideal_path[i+1]]
-            # Estende le coordinate aggiungendo i punti tra un nodo e il suo consecutivo
-            coords.extend(edge['pts'].tolist())
+            node_a = ideal_path[i]
+            node_b = ideal_path[i + 1]
+            edge = graph[node_a][node_b]
+            pts = edge['pts']  # shape (N, 2), format [row, col]
+
+            if len(pts) == 0:
+                continue
+
+            # Get the actual pixel positions of the two nodes
+            pos_a = np.array(graph.nodes[node_a]['o'])  # [row, col]
+            pos_b = np.array(graph.nodes[node_b]['o'])  # [row, col]
+
+            # Check which end of pts is closer to node_a
+            dist_to_a_start = np.linalg.norm(pts[0] - pos_a)
+            dist_to_a_end   = np.linalg.norm(pts[-1] - pos_a)
+
+            if dist_to_a_end < dist_to_a_start:
+                pts = pts[::-1]  # flip so pts goes from A to B
+
+            coords.extend(pts.tolist())
+
+        coords = np.array(coords)
+            
+            
 
         # Conversione della lista in un array NumPy
         coords = np.array(coords)
         
-        print(f"Coords of ideal path:\n{coords}")
-        
+        print(f"Saving ideal path in '{ideal_path_saving_path}'...")
+        with open(ideal_path_saving_path, 'wb') as f:
+            pickle.dump(coords, f)
+        print("File saved!")
+    
     # Crea una nuova immagine con sfondo nero per visualizzare 'coords'
     black_image = np.zeros((display_height, display_width), dtype=np.uint8)
-        
+
     # Disegna sui pixel dell'immagine (deve essere B&W) i nodi e gli archi del grafo.
     sknw.draw_graph(black_image, graph)
     

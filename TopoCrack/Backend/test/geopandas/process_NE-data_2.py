@@ -369,7 +369,7 @@ normalized = normalize_all_sections(sections_gdf, n_points=50)
 
 # ======================== SAVING PROCESSED DATA ========================
 
-save_path = "normalized_sections/n_s_1.pk1"
+save_path = "normalized_sections/n_s_1.pkl"
 print(f"Saving normalized sectins file in '{save_path}'...")
 
 # Save data as pickle file (preserves numpy arrays exactly by saving in binary)
