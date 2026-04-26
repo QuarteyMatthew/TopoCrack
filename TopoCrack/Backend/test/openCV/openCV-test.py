@@ -31,7 +31,7 @@ else:
 img = cv2.resize(img, (display_width, display_height))
 
 # Show original image
-# cv2.imshow('I. Crack 01 - B/W', img)
+cv2.imshow('I. Crack 01 - B/W', img)
 
 # ============= CLACHE Image =============
 clahe1 = cv2.createCLAHE(clipLimit=3)
@@ -250,9 +250,17 @@ while uInput != "quit":
         # Conversione della lista in un array NumPy
         coords = np.array(coords)
         
+        # Campionamento delle coords
+        sampled_coords = []
+        samples_number = 30
+        for i in range(0, len(coords), int(len(coords)/samples_number)):
+            sampled_coords.append(coords[i])
+        
+        sampled_coords = np.array(sampled_coords)
+        
         print(f"Saving ideal path in '{ideal_path_saving_path}'...")
         with open(ideal_path_saving_path, 'wb') as f:
-            pickle.dump(coords, f)
+            pickle.dump(sampled_coords, f)
         print("File saved!")
     
     # Crea una nuova immagine con sfondo nero per visualizzare 'coords'

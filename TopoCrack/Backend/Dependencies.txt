@@ -6,3 +6,5 @@ shapely==2.1.2
 pyproj==3.7.2
 pathlib==1.0.1
 requests==2.33.1
+dtaidistance==2.4.0
+joblib==1.5.3

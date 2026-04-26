@@ -355,8 +355,8 @@ coast = gpd.read_file("./ne_data/ne_10m_coastline/ne_10m_coastline.shp")
 # bbox_italia = (5.93, 34.76, 18.99, 47.10)
 # coast = coast.clip(box(*bbox_italia)).reset_index(drop=True)
 
-# Configuration: divide coastlines into 100 km sections
-SECTION_LENGTH_M = 100_000  # 100 km geodetic distance
+# Configuration: divide coastlines into 1000 km sections
+SECTION_LENGTH_M = 1_000_000  # 1000 km geodetic distance
 
 # Step 1: Split all coastlines into geodetic sections
 print("Dividing coastlines into sections...")
