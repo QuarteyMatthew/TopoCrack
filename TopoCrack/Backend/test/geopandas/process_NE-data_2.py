@@ -352,11 +352,11 @@ def color_for_section(feat_idx, section_idx, cmap='hsv'):
 coast = gpd.read_file("./ne_data/ne_10m_coastline/ne_10m_coastline.shp")
 
 # Ritaglia esattamente alla bounding box (lon_min, lat_min, lon_max, lat_max)
-bbox_italia = (5.93, 34.76, 18.99, 47.10)
-coast = coast.clip(box(*bbox_italia)).reset_index(drop=True)
+# bbox_italia = (5.93, 34.76, 18.99, 47.10)
+# coast = coast.clip(box(*bbox_italia)).reset_index(drop=True)
 
-# Configuration: divide coastlines into 50 km sections
-SECTION_LENGTH_M = 50_000  # 5 km geodetic distance
+# Configuration: divide coastlines into 100 km sections
+SECTION_LENGTH_M = 100_000  # 100 km geodetic distance
 
 # Step 1: Split all coastlines into geodetic sections
 print("Dividing coastlines into sections...")
@@ -364,7 +364,7 @@ sections_gdf = explode_to_sections(coast, section_length_m=SECTION_LENGTH_M)
 
 # Step 2: Normalize each section to canonical [0,1] coordinate space
 print("Normalizing sections...")
-normalized = normalize_all_sections(sections_gdf, n_points=50)
+normalized = normalize_all_sections(sections_gdf, n_points=100)
 
 
 # ======================== SAVING PROCESSED DATA ========================

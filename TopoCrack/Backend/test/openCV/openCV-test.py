@@ -22,7 +22,7 @@ print("Width:", img_width, "\nHeight:", img_height)
 img_ratio = img_width/img_height
 print("Image ratio:", img_ratio)
 # Dynamic size for both vertical and horizontal images
-max_display_length = 600
+max_display_length = 900
 if img_ratio > 1:
     display_width, display_height = int(max_display_length), int(max_display_length/img_ratio)
 else:
@@ -246,8 +246,6 @@ while uInput != "quit":
             coords.extend(pts.tolist())
 
         coords = np.array(coords)
-            
-            
 
         # Conversione della lista in un array NumPy
         coords = np.array(coords)

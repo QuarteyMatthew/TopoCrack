@@ -22,4 +22,4 @@ def download_coastline(resolution='50m', cache_dir='./ne_data'):
   shp = next(local_path.glob("*.shp"))
   return gpd.read_file(shp)
 
-coast = download_coastline(resolution='50m')
+coast = download_coastline(resolution='10m')
