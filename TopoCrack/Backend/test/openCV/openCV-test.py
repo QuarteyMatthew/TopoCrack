@@ -14,7 +14,7 @@ print(script_dir)
 ideal_path_saving_path = "../dtw/example_line_Y-X.bin"
 
 # ============= Original Image =============
-img = cv2.imread(f'{script_dir}/img/crack01.jpg', cv2.IMREAD_GRAYSCALE)
+img = cv2.imread(f'{script_dir}/img/crack02.jpg', cv2.IMREAD_GRAYSCALE)
 
 # Image Settings
 img_height, img_width = img.shape[:2]
@@ -105,7 +105,7 @@ while uInput != "quit":
         result2 = canned_img_1.copy()
         result2[filtered_img_1 < threshold_percentile2] = 255
 
-        # cv2.imshow('IV.b. Darkest 5%', result2)
+        cv2.imshow('IV.b. Darkest 5%', result2)
 
         # =============  =============
 
