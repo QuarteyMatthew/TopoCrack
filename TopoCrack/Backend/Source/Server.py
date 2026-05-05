@@ -1,21 +1,20 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
-from Routes import Crack
-from Routes import Analyzer
+from Routes.AnalysisRoutes import Router as AnalysisRouter
+from Services.CoastlineService import CoastlineService
 
-server = FastAPI(
-    title="TopoCrack Backend",
-    verion="0.1.0",
-    description="TopoCrack's backend server"
-)
+@asynccontextmanager
+async def Lifespan(server: FastAPI):
+    # Avvio: carica (o rigenera) i dati della coste normalizzate.
+    # Questo blocca il server finché non è prondo a gestire le richieste.
+    server.state.CoastalData = CoastlineService.LoadOrBuild()
+    
+    # Yield è una parola chiave utilizzata per creare funzioni generatore. 
+    # A differenza di return, che termina una funzione restituendo un valore, 
+    # yield restituisce un valore e sospende temporaneamente l'esecuzione della funzione, 
+    # salvandone lo stato locale per riprenderla esattamente da dove si era interrotta alla chiamata successiva
+    yield
 
-server.middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_credentials=True,
-)
-
-server.include_router(Crack.router, prefix="/api/crack", tags=["crack"])
+server = FastAPI(title="TopoCrack Backend", Lifespan=Lifespan)
+server.include_router(AnalysisRouter, prefix="/api")
