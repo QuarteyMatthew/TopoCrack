@@ -3,8 +3,8 @@ from pathlib import Path
 
 from Services._CoastlineProcessing import DownloadCoastline, ExplodeToSections, NormalizeAllSections
 
-CACHE_DIR      = Path("../Data/ne_data")
-PICKLE_PATH    = Path("../Data/NormalizedSections.pkl")
+CACHE_DIR      = Path("../Cache/Data/ne_data")
+PICKLE_PATH    = Path("../Cache/NormalizedSections.pkl")
 SECTION_LENGTH = 1_000_000  # 1000 km
 N_POINTS       = 100
 
@@ -23,7 +23,7 @@ class CoastlineService:
         print("Pickle not found. Downloading and processing in progress...")
         coast = DownloadCoastline(resolution="10m", cacheDir=CACHE_DIR)
         sections = ExplodeToSections(coast, sectionLengthMetre=SECTION_LENGTH)
-        normalized = NormalizeAllSections(sections, NPoints=N_POINTS)
+        normalized = NormalizeAllSections(sections, nPoints=N_POINTS)
         
         PICKLE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(PICKLE_PATH, "wb") as f:
