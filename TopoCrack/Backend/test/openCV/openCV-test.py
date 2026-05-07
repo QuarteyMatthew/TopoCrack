@@ -14,7 +14,7 @@ print(script_dir)
 ideal_path_saving_path = "../dtw/example_line_Y-X.bin"
 
 # ============= Original Image =============
-img = cv2.imread(f'{script_dir}/img/crack02.jpg', cv2.IMREAD_GRAYSCALE)
+img = cv2.imread(f'{script_dir}/img/crack10.jpg', cv2.IMREAD_GRAYSCALE)
 
 # Image Settings
 img_height, img_width = img.shape[:2]
@@ -31,13 +31,13 @@ else:
 img = cv2.resize(img, (display_width, display_height))
 
 # Show original image
-cv2.imshow('I. Crack 01 - B/W', img)
+# cv2.imshow('I. Crack 01 - B/W', img)
 
 # ============= CLACHE Image =============
 clahe1 = cv2.createCLAHE(clipLimit=3)
 
 clahe_img_1 = np.clip(clahe1.apply(img), 0, 255).astype(np.uint8)
-cv2.imshow('II. Crack 01 - CLAHE1', clahe_img_1)
+# cv2.imshow('II. Crack 01 - CLAHE1', clahe_img_1)
 
 # ============= Bilateral Filtering Params =============
 d = 9
@@ -71,7 +71,7 @@ while uInput != "quit":
         
         # ============= Bilateral Filtered Image =============
         filtered_img_1 = cv2.bilateralFilter(clahe_img_1, d, sigmaColor, sigmaSpace)
-        cv2.imshow('III.a. Filtered 1 - Bilateral', filtered_img_1)
+        # cv2.imshow('III.a. Filtered 1 - Bilateral', filtered_img_1)
 
         # ============= Brightness Flattening on Bilater Filter's result =============
         threshold_percentile1 = np.percentile(filtered_img_1, darkestPixelPercentageBilateral)  # valore sotto cui cade il 20% più scuro
@@ -84,7 +84,7 @@ while uInput != "quit":
         # 
         result1[filtered_img_1 > threshold_percentile1] = background_value1
 
-        cv2.imshow('III.b. Darkest 25%', result1)
+        # cv2.imshow('III.b. Darkest 25%', result1)
 
         # ============= Edge Detection Image (Canny) =============
         # Dopo il bilateral filter, Canny invece di threshold diretta
@@ -94,7 +94,7 @@ while uInput != "quit":
         thresholds1 = [lower1, upper1]
 
         canned_img_1 = cv2.Canny(result1, int(thresholds1[0]), int(thresholds1[1]))
-        cv2.imshow('IV.a. Edges 1 - Canny', canned_img_1)
+        # cv2.imshow('IV.a. Edges 1 - Canny', canned_img_1)
 
         # =============  =============
         threshold_percentile2 = np.percentile(filtered_img_1, darkestPixelPercentageCanny)  # valore sotto cui cade il 5% più scuro
@@ -105,7 +105,7 @@ while uInput != "quit":
         result2 = canned_img_1.copy()
         result2[filtered_img_1 < threshold_percentile2] = 255
 
-        cv2.imshow('IV.b. Darkest 5%', result2)
+        # cv2.imshow('IV.b. Darkest 5%', result2)
 
         # =============  =============
 
@@ -113,12 +113,12 @@ while uInput != "quit":
         # ============= Closing Morphology Image =============
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (anchor, anchor))
         closed_img_1 = cv2.morphologyEx(result2, cv2.MORPH_CLOSE, kernel)
-        cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
+        # cv2.imshow('V. Closed 1 - morphologyEx', closed_img_1)
 
         # ============= To Binary Image =============
         # Ora binarizza (è già quasi binaria, ma per sicurezza)
         _, binary_img_1 = cv2.threshold(closed_img_1, 127, 255, cv2.THRESH_BINARY)
-        cv2.imshow('VI. Binary 1 - Otsu', binary_img_1)
+        # cv2.imshow('VI. Binary 1 - Otsu', binary_img_1)
 
         # ============= Skeletonization =============
         # 'sk.morphology.skeletonize':
@@ -136,7 +136,7 @@ while uInput != "quit":
         # 'astype(np.uint8)' converte i valori booleani della maschera in 0/1 interi
         # moltiplicando per 255 si ottiene un immagine in scala di grigi
         skele_img_display = skele_img_1.astype(np.uint8) * 255
-        cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
+        # cv2.imshow('VII. Skele 1 - skeletonize', skele_img_display)
         
         # ============= Find Main Path =============
         # 'build_sknw' è la funzione che:

@@ -1,49 +1,66 @@
 import geopandas
-from geopandas import GeoDataFrame
-from shapely.geometry import LineString
-from shapely.ops import linemerge
-from pyproj import CRS, Geod
-from pathlib import Path
-import requests, zipfile, io
 import numpy
+import requests, zipfile, io
+
+from pyproj import CRS, Geod, Transformer
+from shapely.geometry import LineString
+from matplotlib import pyplot as plt
+from geopandas import GeoDataFrame
+from shapely.ops import linemerge
+from pathlib import Path
 
 # Inizializzazione del calcolatore geodetico con l'elissoide WGS84
 geodCalc = Geod(ellps="WGS84")
 
 def DownloadCoastline(resolution: str = "50m", cacheDir: str = "../Cache") -> GeoDataFrame:
     cachePath = Path(cacheDir)
+    coastlineDir = f"ne_{resolution}_coastline"
+    coastlinePath = cachePath / coastlineDir
+    dotShapePath = coastlinePath / "ne_10m_coastline.shp"
+    dotShapeXPath = coastlinePath / "ne_10m_coastline.shx"
     
-    if not cachePath.exists():
-        cachePath.mkdir(exist_ok=True)
+    if not (coastlinePath.exists() and dotShapePath.exists() and dotShapeXPath.exists()):
+        if not cachePath.exists():
+            cachePath.mkdir(parents=True, exist_ok=True)
         
-    fileName = f"ne_{resolution}_coastline"
-    filePath = cachePath / fileName
-    downloadURL = f"https://naturalearth.s3.amazonaws.com/{resolution}_physical/{fileName}.zip"
-    
-    req = requests.get(downloadURL)
-    req.raise_for_status()
-    
-    with zipfile.ZipFile(io.BytesIO(req.content)) as zipFile:
-        zipFile.extractall(filePath)
+        print("Coastline data doesn't exists. Proceding to download it...")
         
-    shapeFile = next(filePath.glob("*.shp")) 
+        downloadURL = f"https://naturalearth.s3.amazonaws.com/{resolution}_physical/{coastlineDir}.zip"
+        
+        req = requests.get(downloadURL)
+        req.raise_for_status()
+        
+        with zipfile.ZipFile(io.BytesIO(req.content)) as zipFile:
+            zipFile.extractall(coastlinePath)
+            
+        for neFile in coastlinePath.iterdir():
+            if not neFile.is_file():
+                continue
+            
+            suffices = [".cpg", ".dbf", ".prj", ".html", ".txt"]
+            if neFile.suffix.lower() in suffices:
+                neFile.unlink()
+    
+    shapeFile = next(coastlinePath.glob("*.shp")) 
     
     return geopandas.read_file(shapeFile)
 
-def ExplodeToSections(coastlines: GeoDataFrame, sectionLengthMetre: int) -> numpy.ndarray:
+def ExplodeToSections(coastlines: GeoDataFrame, sectionLengthMetre: int) -> GeoDataFrame:
     featureIndecies = []
     
     # Elaborazione di ogni coastline
-    for featIndex, coastline in  coastlines.iterrows():
+    for featIndex, coastline in coastlines.iterrows():
         segments = ExplodeToGeodeticSegments(coastline.geometry, sectionLengthMetre)
         
         # Append delle nuove sezioni preservando il feature index
         for segment in segments:
             featureIndecies.append({"featureIndex": featIndex, **segment})
     
-    return numpy.array(featureIndecies)
+    print(f"  {len(featureIndecies)} sections created from all the feature")
+    
+    return GeoDataFrame(featureIndecies, crs=coastlines.crs).reset_index(drop=True)
 
-def NormalizeAllSections(sections: numpy.ndarray, nPoints: int) -> numpy.ndarray:
+def NormalizeAllSections(sections: GeoDataFrame, nPoints: int) -> numpy.ndarray:
     results = []
     
     for _, section in sections.iterrows():
@@ -57,7 +74,7 @@ def NormalizeAllSections(sections: numpy.ndarray, nPoints: int) -> numpy.ndarray
         
         results.append({
             "featureIndex": section.featureIndex, # Original feature ID
-            "sectionindex": section.sectionIndex, # Section number within feature
+            "sectionIndex": section.sectionIndex, # Section number within feature
             "startCoord"  : section.startCoord,   # Original WGS84 start (for visualization)
             "endCoord"    : section.endCoord,     # Original WGS84 end (for visualization)
             "points"      : points,               # Normalized points or None if failed
@@ -111,12 +128,12 @@ def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) ->
         start.append(midPoint)
         
         # Seconda metà: dal punti di metà alla fine
-        end = [coastlineCoords[midPoint]]
+        end = [midPoint]
         for vtxDist, coord in zip(vertexDistancies, coastlineCoords):
             if midDistance < vtxDist < coastlineLength:
                 end.append(coord)
         
-        start.append(coastlineCoords[-1])
+        end.append(coastlineCoords[-1])
         
         return numpy.array([
             {
@@ -160,16 +177,16 @@ def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) ->
         })
 
     # Gestisce il resto dopo l'ultimo intervallo completo
-    remainder_start = nSections * sectionLengthMetre
-    remainder_length = coastlineLength - remainder_start
+    remainderStart = nSections * sectionLengthMetre
+    remainderLength = coastlineLength - remainderStart
 
-    if remainder_length >= minLengthMetre:
-        startPoint = InterpolateGeodetic(coastlineCoords, remainder_start)
+    if remainderLength >= minLengthMetre:
+        startPoint = InterpolateGeodetic(coastlineCoords, remainderStart)
         endPoint = coastlineCoords[-1]
 
         innerLine = [startPoint]
         for vtxDist, coord in zip(vertexDistancies, coastlineCoords):
-            if remainder_start < vtxDist < coastlineLength:
+            if remainderStart < vtxDist < coastlineLength:
                 innerLine.append(coord)
         innerLine.append(endPoint)
 
@@ -178,7 +195,7 @@ def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) ->
             "sectionIndex": nSections,
             "startCoord"  : startPoint,
             "endCoord"    : endPoint,
-            "lengthMetre" : remainder_length,
+            "lengthMetre" : remainderLength,
         })
 
     return numpy.array(sections)
@@ -254,3 +271,72 @@ def GetUtmCrsFormGivenLongitude(longitude: float) -> CRS:
     
     # Codice EPSG: 32600 + zona per l'emisfero settentrionale (32700 + zona per quello meridionale)
     return CRS.from_epsg(32600 + zone)
+
+def ColorForSection(featureIndex, sectionIndex, cmap: str = "hsv"):
+    # Mix two indices using XOR and multiplication by large primes
+    # This ensures nearby indices map to very different hash values
+    # 2654435761 and 2246822519 are large primes commonly used in hashing
+    h = (featureIndex * 2654435761 ^ sectionIndex * 2246822519) & 0xFFFFFFFF
+    
+    # Convert 32-bit hash to [0, 1] range for colormap
+    value = h / 0xFFFFFFFF
+    
+    return plt.colormaps[cmap](value)
+
+def VisualizeCoastline(coastlines: GeoDataFrame, normalized: list):
+    # Step 3: Generate deterministic colors for each section
+    colors = [ColorForSection(item['featureIndex'], item['sectionIndex']) for item in normalized]
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    # --- Plot 1: Original coastlines (WGS84 coordinates) ---
+    coastlines.plot(ax=axes[0], color='steelblue', lw=0.5)
+    axes[0].set_title("Costa originale (WGS84)")
+    axes[0].set_aspect('equal')
+
+    # --- Plot 2: Sections reprojected back to WGS84 ---
+    # Fix: invert the normalization in UTM space (meters), then convert to WGS84.
+    # Doing it in lon/lat space (as before) causes severe distortion near the poles
+    # because degrees of longitude shrink dramatically at high latitudes.
+    coastlines.plot(ax=axes[1], color='lightgray', lw=0.4, zorder=1)
+
+    for item, color in zip(normalized, colors):
+        if item['points'] is None:
+            continue
+
+        start_lonlat = item['startCoord']
+        end_lonlat   = item['endCoord']
+
+        # Use the same UTM zone that was used during normalization
+        lon_center = (start_lonlat[0] + end_lonlat[0]) / 2
+        utm_crs = GetUtmCrsFormGivenLongitude(lon_center)
+
+        to_utm  = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True)
+        to_wgs  = Transformer.from_crs(utm_crs, "EPSG:4326", always_xy=True)
+
+        # Convert start and end to UTM (meters) — same space the normalization used
+        start_utm = numpy.array(to_utm.transform(start_lonlat[0], start_lonlat[1]))
+        end_utm   = numpy.array(to_utm.transform(end_lonlat[0],   end_lonlat[1]))
+
+        chord_vec = end_utm - start_utm
+        chord_len = numpy.linalg.norm(chord_vec)
+        angle     = numpy.arctan2(chord_vec[1], chord_vec[0])
+
+        c, s  = numpy.cos(angle), numpy.sin(angle)
+        R_inv = numpy.array([[c, -s], [s, c]])
+
+        # 1. Scale by UTM chord length  2. Rotate back  3. Translate to UTM start
+        pts_utm = (R_inv @ (item['points'] * chord_len).T).T + start_utm
+
+        # Convert UTM coordinates back to WGS84 lon/lat
+        lons, lats = to_wgs.transform(pts_utm[:, 0], pts_utm[:, 1])
+
+        axes[1].plot(lons, lats, lw=1.0, alpha=0.6, color=color, rasterized=True)
+
+    axes[1].set_title("Sezioni riposizionate (WGS84)")
+    axes[1].set_aspect("equal")
+    axes[1].set_xlabel("Longitudine")
+    axes[1].set_ylabel("Latitudine")
+
+    plt.tight_layout()
+    plt.show()
