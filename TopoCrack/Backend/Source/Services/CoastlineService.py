@@ -1,9 +1,9 @@
 import pickle
 from pathlib import Path
 
-from Services._CoastlineProcessing import DownloadCoastline, ExplodeToSections, NormalizeAllSections
+from _CoastlineProcessing import DownloadCoastline, ExplodeToSections, NormalizeAllSections
 
-CACHE_DIR      = Path("../Cache/Data/ne_data")
+CACHE_DIR      = Path("../Cache/ne_data")
 PICKLE_PATH    = Path("../Cache/NormalizedSections.pkl")
 SECTION_LENGTH = 1_000_000  # 1000 km
 N_POINTS       = 100
@@ -20,9 +20,13 @@ class CoastlineService:
             
         # Il file non esiste: viene riscaricato, diviso in sezioni e
         # queste ultime tutte normalizzate
-        print("Pickle not found. Downloading and processing in progress...")
-        coast = DownloadCoastline(resolution="10m", cacheDir=CACHE_DIR)
-        sections = ExplodeToSections(coast, sectionLengthMetre=SECTION_LENGTH)
+        print("Pickle not found. Downloading and processing geodetic data...")
+        
+        print("Downloading geodetic data...")
+        coastlines = DownloadCoastline(resolution="10m", cacheDir=CACHE_DIR)
+        print(f"Divirding coastlines into sections of {SECTION_LENGTH} metre each...")
+        sections = ExplodeToSections(coastlines, sectionLengthMetre=SECTION_LENGTH)
+        print("Normalizing all sections...")
         normalized = NormalizeAllSections(sections, nPoints=N_POINTS)
         
         PICKLE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -32,4 +36,6 @@ class CoastlineService:
         print("Pickle saved")
         
         return normalized
+    
+CoastlineService.LoadOrBuild()
             
