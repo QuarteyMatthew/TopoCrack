@@ -4,6 +4,16 @@ import skimage
 import networkx
 import _SknwPatched as sknw
 
+from ..Schemas.AnalysisSchemas import Point
+
+from pydantic import BaseModel
+class Point(BaseModel):
+    X: int
+    Y: int
+    
+    def ToTuple(self) -> tuple[int, int]:
+        return (self.X, self.Y)
+
 class ImageService:
     
     # Parametri della pipeline
@@ -18,7 +28,7 @@ class ImageService:
     _SamplesNumber:                   int   = 30
     
     @staticmethod
-    def ExtractCrackPoints(imageBytes: bytes, userStart: tuple[int, int], userEnd: tuple[int, int]) -> numpy.ndarray:
+    def ExtractCrackPoints(imageBytes: bytes, userStart: Point, userEnd: Point) -> numpy.ndarray:
         """
         Prende i byte dell'immagine e i due punti utente (x, y),
         restituisce i punti della crepa come array NumPy (N, 2) in formato [row, col].
@@ -35,7 +45,7 @@ class ImageService:
         return ImageService._RunPipeline(image, userStart, userEnd)
     
     @staticmethod
-    def _RunPipeline(image: numpy.ndarray, userStart: tuple[int, int], userEnd: tuple[int, int]) -> numpy.ndarray:
+    def _RunPipeline(image: numpy.ndarray, userStart: Point, userEnd: Point) -> numpy.ndarray:
         """
         Pipeline completa: dall'immagine grezza alle coordinate della crepa
         campionate e pronte per il DTW.
@@ -63,8 +73,8 @@ class ImageService:
         # quindi devono essere riscalati insieme all'immagine.
         scaleX = displayWidth / imageWidth
         scaleY = displayHeight / imageHeight
-        userStart = (int(userStart[0] * scaleX), int(userStart[1] * scaleY))
-        userEnd = (int(userEnd[0] * scaleX), int(userEnd[1] * scaleY))
+        userStart = Point(X=int(userStart.X * scaleX), Y=int(userStart.Y * scaleY))
+        userEnd = Point(X=int(userEnd.X * scaleX), Y=int(userEnd.Y * scaleY))
         
         # ---- 2. CLAHE (Contrast Limited Adaptive Histogram Equalization) ----
         # Migliora il contrasto locale: le crepe sottili su sfondi
@@ -149,13 +159,13 @@ class ImageService:
         coords = ImageService._ExtractCoordsFromPath(graph, shortestPath)
         
         # Visualizzazione
-        # ImageService._Visualize(
-        #     graph,
-        #     displayWidth, displayHeight,
-        #     userStart, userEnd,
-        #     coords,
-        #     startNodeIndex, endNodeIndex
-        # )
+        ImageService._Visualize(
+            graph,
+            displayWidth, displayHeight,
+            userStart, userEnd,
+            coords,
+            startNodeIndex, endNodeIndex
+        )
         
         # --------------------- 13. Campionamento -----------------------
         # Il DTW scala quadraticamente con il numero di punti, quindi
@@ -167,7 +177,7 @@ class ImageService:
         return sampledCoords
     
     @staticmethod
-    def _FindBestNodePair(graph: object, userStart: tuple[int, int], userEnd: tuple[int, int]) -> tuple[int, int]:
+    def _FindBestNodePair(graph: object, userStart: Point, userEnd: Point) -> tuple[int, int]:
         """
         Trova la coppia di nodi del grafo (StartNode, EndNode) che minimizza
         la somma delle distanze euclidee da UserStart e UserEnd.
@@ -176,8 +186,8 @@ class ImageService:
         sono in formato (row, col), quindi converte prima di confrontare.
         """
         
-        userStartRc = numpy.array([userStart[1], userStart[0]])
-        userEndRc = numpy.array([userEnd[1], userEnd[0]])
+        userStartRc = numpy.array([userStart.Y, userStart.X])
+        userEndRc = numpy.array([userEnd.Y, userEnd.X])
         
         minDistanceSum = numpy.inf
         startNodeIndex = None
@@ -258,8 +268,8 @@ class ImageService:
         return numpy.array(coords)
 
     @staticmethod
-    def _Visualize(graph, displayWidth: int, displayHeight: int, userStart: tuple[int, int],
-        userEnd: tuple[int, int], coords: numpy.ndarray, startNodeIndex: int, endNodeIndex: int
+    def _Visualize(graph, displayWidth: int, displayHeight: int, userStart: Point,
+        userEnd: Point, coords: numpy.ndarray, startNodeIndex: int, endNodeIndex: int
     ):
         # Crea una nuova immagine con sfondo nero per visualizzare 'coords'
         blackImage = numpy.zeros((displayHeight, displayWidth), dtype=numpy.uint8)
@@ -288,23 +298,23 @@ class ImageService:
         for i in range(-3, 4):
             # Giving a 2 px width to the line
             for j in range(-1, 2):
-                pixelX = userStart[0] + i + j # Applying the horizontal offset
-                pixelY = userStart[1] + i + j # Applying the vertical offset
+                pixelX = userStart.X + i + j # Applying the horizontal offset
+                pixelY = userStart.Y + i + j # Applying the vertical offset
                 if pixelX > 0 and pixelX < displayWidth:
-                    rgbImage[userStart[1], pixelX] = (255, 255, 0)
+                    rgbImage[userStart.Y, pixelX] = (255, 255, 0)
                 if pixelY > 0 and pixelY < displayHeight:
-                    rgbImage[pixelY, userStart[0]] = (255, 255, 0)
+                    rgbImage[pixelY, userStart.X] = (255, 255, 0)
         
         # Drawing the userEnd
         for i in range(-3, 4):
             # Giving a 2 px width to the line
             for j in range(-1, 2):
-                pixelX = userEnd[0] + i + j # Applying the horizontal offset
-                pixelY = userEnd[1] + i + j # Applying the vertical offset
+                pixelX = userEnd.X + i + j # Applying the horizontal offset
+                pixelY = userEnd.Y + i + j # Applying the vertical offset
                 if pixelX > 0 and pixelX < displayWidth:
-                    rgbImage[userEnd[1], pixelX] = (255, 0, 255)
+                    rgbImage[userEnd.Y, pixelX] = (255, 0, 255)
                 if pixelY > 0 and pixelY < displayHeight:
-                    rgbImage[pixelY, userEnd[0]] = (255, 0, 255)
+                    rgbImage[pixelY, userEnd.X] = (255, 0, 255)
         
         cv2.imshow("Graph with the shortest path", rgbImage)
         cv2.waitKey(0) & 0xFF
@@ -312,4 +322,6 @@ class ImageService:
 # from pathlib import Path
 
 # imageBytes = Path("../Resources/crack10.jpg").read_bytes()
-# ImageService.ExtractCrackPoints(imageBytes, (420, 400), (480, 100))
+# userStart = Point(X=420, Y=400)
+# userEnd = Point(X=480, Y=100)
+# ImageService.ExtractCrackPoints(imageBytes, userStart, userEnd)

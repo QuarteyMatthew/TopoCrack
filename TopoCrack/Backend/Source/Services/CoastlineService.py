@@ -40,4 +40,5 @@ class CoastlineService:
         print("Pickle saved")
         
         return normalized
-            
+
+CoastlineService.LoadOrBuild()

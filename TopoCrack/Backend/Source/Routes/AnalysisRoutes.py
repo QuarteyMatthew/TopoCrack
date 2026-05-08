@@ -21,8 +21,8 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
     
     crackPoints = ImageService.ExtractCrackPoints(
         ImageBytes = analysisReq.ImageBytes,
-        UserStart = analysisReq.UserStart.ToTuple(),
-        UserEnd = analysisReq.UserEnd.ToTuple(),
+        UserStart = analysisReq.UserStart,
+        UserEnd = analysisReq.UserEnd,
     )
     
     bestMatch = DtwService.FindBestMatch(crackPoints, coastalData)
