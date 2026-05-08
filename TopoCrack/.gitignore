@@ -1,3 +1,12 @@
+# Frontend
 FrontEnd/flutter/
+
+# Backend
 .venv/
+__pycache__/
+
+Cache/
+
+# Backend/test module
 ne_data/
+normalized_sections/
