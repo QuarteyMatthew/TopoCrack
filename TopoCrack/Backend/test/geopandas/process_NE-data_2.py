@@ -306,6 +306,7 @@ def normalize_all_sections(sections_gdf: gpd.GeoDataFrame, n_points: int = 100) 
         try:
             # Normalize this section to [0,1] × [-y,y] space
             pts = section_to_normalized_points(row.geometry, n_points)
+            
         except ValueError as e:
             # Skip degenerate sections
             print(f"  Sezione ({row.feat_idx}, {row.section_idx}) saltata: {e}")
