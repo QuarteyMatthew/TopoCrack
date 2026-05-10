@@ -6,6 +6,7 @@ FrontEnd/flutter/
 __pycache__/
 
 Cache/
+Backend/Source/Services/Native/Build/
 
 # Backend/test module
 ne_data/

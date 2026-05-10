@@ -25,7 +25,7 @@ print(f"Loaded sections: {len(coastalData)}\n")
 # --------------- 2. Carica l'immagine di test ---------------
 # Leggiamo i byte dal disco — identico a come arrivano via HTTP.
 print("========= Phase 2: image processing =========")
-imagePath = Path("Resources/crack10.jpg")
+imagePath = Path("Resources/Crack10.jpg")
 imageBytes = imagePath.read_bytes()
 
 # Modifica questi valori in base all'immagine che stai testando.

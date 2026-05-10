@@ -1,5 +1,5 @@
 from typing import Any, List
-from mytimeit import timeit
+from TopoCrack.Backend.test.dtw.Timer import timeit
 from joblib import Parallel, delayed
 import math
 import numpy as np

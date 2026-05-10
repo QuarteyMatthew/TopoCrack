@@ -376,7 +376,7 @@ def VisualizeCoastline(coastlines: GeoDataFrame, normalized: list):
         R_inv = numpy.array([[c, -s], [s, c]])
 
         # 1. Scale by UTM chord length  2. Rotate back  3. Translate to UTM start
-        pts_utm = (R_inv @ (item['points'] * chord_len).T).T + start_utm
+        pts_utm = (R_inv @ (item["points"] * chord_len).T).T + start_utm
 
         # Convert UTM coordinates back to WGS84 lon/lat
         lons, lats = to_wgs.transform(pts_utm[:, 0], pts_utm[:, 1])
