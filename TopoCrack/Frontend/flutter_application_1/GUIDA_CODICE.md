@@ -73,3 +73,12 @@ Gestione Caricamento: Ho aggiunto uno stato _isLoading. Quando premi "OK", il bo
 Parsing Risposta: Una volta ricevuta la risposta JSON, estraggo lat_start, lon_start e coast_name per passarli alla schermata dei risultati.
 4.
 Sicurezza: Ho aggiunto un blocco try-catch per gestire eventuali errori di rete o del server, mostrando un messaggio all'utente se qualcosa va storto.
+
+## ERRORI:
+
+L'errore Incorrect use of ParentDataWidget in Flutter accade quasi sempre quando un widget Positioned non è un figlio diretto di uno Stack.
+Nel tuo codice, la funzione _buildDot restituisce un LayoutBuilder che al suo interno contiene un Positioned. Questo rompe la gerarchia di Flutter.
+
+Il problema nasce dal fatto che le coordinate (0.0 - 1.0) sono calcolate rispetto all'intera area dello schermo e non rispetto alla sola immagine. Poiché la schermata dei risultati ha proporzioni diverse (la card in basso è più grande), l'immagine viene centrata diversamente, "spostando" i punti.
+Per risolvere questo problema in modo definitivo, dobbiamo assicurarci che i punti siano disegnati esattamente sopra l'immagine, indipendentemente dallo spazio nero attorno.
+Come ho risolto: In entrambe le schermate ho aggiunto un calcolo automatico del rapporto d'aspetto (proporzioni) della foto. Adesso, sia l'editor che i risultati usano un widget AspectRatio che avvolge esattamente l'immagine. In questo modo, la coordinata 0.5, 0.5 corrisponderà sempre al centro preciso della foto, indipendentemente dalla dimensione dello schermo.
