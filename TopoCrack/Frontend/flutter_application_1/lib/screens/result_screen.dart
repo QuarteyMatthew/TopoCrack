@@ -23,8 +23,6 @@ class ResultScreen extends StatelessWidget {
 
   /// Apre Google Maps con le coordinate ricevute dal server
   Future<void> _openMaps(BuildContext context) async {
-    // qui devo fare... usare le coordinate reali restituite dal server API
-    // e mostrare il punto esatto sulla costa corrispondente alla crepa
     final uri = Uri.parse(
       'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
     );

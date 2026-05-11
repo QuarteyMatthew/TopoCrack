@@ -111,15 +111,17 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
         final body = jsonDecode(bodyText);
 
         if (mounted) {
+          final startCoord = body['StartCoord'] ?? {};
+          
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => ResultScreen(
                 imageFile: widget.imageFile,
                 startPoint: _startPoint!,
                 endPoint: _endPoint!,
-                latitude: (body['lat_start'] as num?)?.toDouble() ?? 39.7157,
-                longitude: (body['lon_start'] as num?)?.toDouble() ?? 2.9681,
-                coastName: body['coast_name'] ?? 'Località rilevata',
+                latitude: (startCoord['Lat'] as num?)?.toDouble() ?? 0.0,
+                longitude: (startCoord['Lon'] as num?)?.toDouble() ?? 0.0,
+                coastName: body['Message'] ?? 'Analisi completata',
               ),
             ),
           );
