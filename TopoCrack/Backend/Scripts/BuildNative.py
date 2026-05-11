@@ -42,13 +42,13 @@ print(f"Libraries    : {librariesDir}")
 
 # ------------------ Funzioni per la compilazione ------------------
 def FindMsvcVcvarsall() -> Path | None:
-    VsWhere = Path("C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe")
+    vsWhere = Path("C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe")
     
-    if not VsWhere.exists():
+    if not vsWhere.exists():
         return None
     
     Result = subprocess.run(
-        [str(VsWhere), "-latest", "-property", "installationPath"],
+        [str(vsWhere), "-latest", "-property", "installationPath"],
         capture_output=True,
         text=True,
     )
@@ -101,22 +101,22 @@ def CompileWithGcc(outputFile: Path, extraFlags: list[str]) -> bool:
     print(f"Using gcc")
     print(f"Step 1 (compile): {' '.join(compileCmd)}")
 
-    Result = subprocess.run(compileCmd, capture_output=True, text=True)
-    if Result.returncode != 0:
+    result = subprocess.run(compileCmd, capture_output=True, text=True)
+    if result.returncode != 0:
         print("Compilation step failed:")
-        print(Result.stderr)
+        print(result.stderr)
         
         return False
 
     # Passo 2: link del file oggetto nella shared library
-    LinkCmd = ["gcc", "-shared", "-o", str(outputFile), str(objFile), "-lm"]
+    linkCmd = ["gcc", "-shared", "-o", str(outputFile), str(objFile), "-lm"]
 
-    print(f"Step 2 (link)   : {' '.join(LinkCmd)}\n")
+    print(f"Step 2 (link)   : {' '.join(linkCmd)}\n")
 
-    Result = subprocess.run(LinkCmd, capture_output=True, text=True)
-    if Result.returncode != 0:
+    result = subprocess.run(linkCmd, capture_output=True, text=True)
+    if result.returncode != 0:
         print("Link step failed:")
-        print(Result.stderr)
+        print(result.stderr)
         
         return False
 
@@ -128,10 +128,10 @@ if sys.platform == "win32":
     outputFile = librariesDir / "DtwCore.dll"
     print(f"Output   : {outputFile}\n")
     
-    VcVarsAll = FindMsvcVcvarsall()
-    if VcVarsAll is not None:
+    vcVarsAll = FindMsvcVcvarsall()
+    if vcVarsAll is not None:
         # Compila con MSVC
-        success = CompileWithMsvc(VcVarsAll, outputFile)
+        success = CompileWithMsvc(vcVarsAll, outputFile)
     else:
         # Fallback e compila con GCC
         print("MSVC not found, falling back to MinGW gcc...")
@@ -157,7 +157,7 @@ elif sys.platform == "darwin":
         
 else:
     # Sistemi Linux e altri sistemi Unix-like
-    outputFile = BuildDir / "DtwCore.so"
+    outputFile = buildDir / "DtwCore.so"
     print(f"Output   : {outputFile}\n")
     
     # Compila con GCC
