@@ -25,12 +25,18 @@ def FindPython() -> str:
         # subprocess.run con 'capture_output' evita che l'output di --version
         # sporchi la console. check=False perché vogliamo gestire manualmente
         # il caso in cui il comando non esiste.
-        Result = subprocess.run(
-            [candidate, "--version"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            Result = subprocess.run(
+                [candidate, "--version"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        except Exception as e:
+            print(f"ERROR: {e}: {candidate}")
+            continue
+
         if Result.returncode == 0:
             return candidate
     

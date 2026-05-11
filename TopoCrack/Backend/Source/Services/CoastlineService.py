@@ -8,12 +8,17 @@ from ._CoastlineProcessing import DownloadCoastline, ExplodeToSections, Normaliz
 CACHE_DIR      = Path("Cache/NeturalEarthData")
 PICKLE_PATH    = Path("Cache/NormalizedSections.pkl")
 SECTION_LENGTH = 1_000_000  # 1000 km
-N_POINTS       = 100
+N_POINTS       = 50
 
 logger = logging.getLogger(__name__)
 
 class CoastlineService:
     
+    # _CacheDir      = Path("Cache/NeturalEarthData")
+    # _PicklePath    = Path("Cache/NormalizedSections.pkl")
+    # _SectionLength = 1_000_000 # 1000 km
+    # _NPoints       = 100
+
     @staticmethod
     def LoadOrBuild() -> numpy.ndarray:
         # ---- 1. Controlla che il pickle file esista nella cache ----

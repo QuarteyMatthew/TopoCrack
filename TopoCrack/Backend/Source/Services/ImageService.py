@@ -20,7 +20,7 @@ class ImageService:
     _DarkestPixelPercentageBilateral: int   = 25
     _DarkestPixelPercentageCanny:     int   = 5
     _MorphAnchor:                     int   = 3
-    _SamplesNumber:                   int   = 200
+    _SamplesNumber:                   int   = 50
     
     @staticmethod
     def ExtractCrackPoints(imageBytes: bytes, userStart: Point, userEnd: Point) -> numpy.ndarray:

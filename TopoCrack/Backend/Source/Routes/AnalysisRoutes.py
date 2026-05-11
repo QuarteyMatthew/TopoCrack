@@ -55,7 +55,7 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
         raise HTTPException(status_code=500, detail="Internal error during image processing.")
     
     # ---------------- 3. DTW e best match ----------------
-    logger.info("============================= Stage 2: DTW end finding the best match =============================")
+    print("============================= Stage 2: DTW end finding the best match =============================")
     logger.info("Invoking DtwService.FindBestMatch...")
     
     try:

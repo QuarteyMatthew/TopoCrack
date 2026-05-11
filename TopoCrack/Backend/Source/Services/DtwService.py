@@ -117,7 +117,7 @@ class DtwService:
                 scoreRange,
             )
         
-        DtwService._Visualize(preparedCrackPoints, coastalData, bestMatch)
+        # DtwService._Visualize(preparedCrackPoints, coastalData, bestMatch)
 
         return bestMatch
     
@@ -220,7 +220,7 @@ class DtwService:
         )
 
         points = bestCoastalData["points"]
-        axes.plot(points[:, 0], points[:, 1], label=f"{bestMatch["featureIndex"]}_{bestMatch["sectionIndex"]} ({bestMatch["cost"]:.4f})")
+        axes.plot(points[:, 0], points[:, 1], label=f"{bestMatch['featureIndex']}_{bestMatch['sectionIndex']} ({bestMatch['cost']:.4f})")
         
         axes.set_aspect("equal", adjustable="box")
         axes.legend()

@@ -135,7 +135,7 @@ if sys.platform == "win32":
     else:
         # Fallback e compila con GCC
         print("MSVC not found, falling back to MinGW gcc...")
-        success = CompileWithGcc(outputFile, ExtraFlags=[])
+        success = CompileWithGcc(outputFile, extraFlags=[])
         
     if not success:
         print("\nERROR: Build failed on Windows.")
@@ -150,7 +150,7 @@ elif sys.platform == "darwin":
     print(f"Output   : {outputFile}\n")
     
     # Compila con GCC
-    if not CompileWithGcc(outputFile, ExtraFlags=["-fPIC"]):
+    if not CompileWithGcc(outputFile, extraFlags=["-fPIC"]):
         print("\nERROR: Build failed on macOS. Run: xcode-select --install")
         
         sys.exit(1)
@@ -161,7 +161,7 @@ else:
     print(f"Output   : {outputFile}\n")
     
     # Compila con GCC
-    if not CompileWithGcc(outputFile, ExtraFlags=["-fPIC"]):
+    if not CompileWithGcc(outputFile, extraFlags=["-fPIC"]):
         print("\nERROR: Build failed on Linux. Run: sudo apt install gcc  (or equivalent for your distro)")
         
         sys.exit(1)
