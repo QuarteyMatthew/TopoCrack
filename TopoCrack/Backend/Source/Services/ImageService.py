@@ -301,12 +301,24 @@ class ImageService:
         # Il DTW scala quadraticamente con il numero di punti, quindi
         # campionare a un numero fisso (_SamplesNumber) è fondamentale
         # per mantenere i tempi di risposta accettabili.
-        step = max(1, len(coords) // ImageService._SamplesNumber)
-        sampledCoords = coords[::step]
         
+        # numpy.linspace(start, stop, num) genera 'num' valori equidistanti
+        # nell'intervallo [start, stop], estremi inclusi.
+        # Convertendo in int otteniamo indici interi validi per indicizzare coords.
+        # Questo garantisce ESATTAMENTE _SamplesNumber punti in output,
+        # qualunque sia la lunghezza di coords — anche se coords ha meno punti
+        # del numero di campioni desiderato (caso gestito sotto).
+        if len(coords) <= ImageService._SamplesNumber:
+            # Se la crepa ha già meno punti del target, la teniamo com'è.
+            # Non ha senso "aggiungere" punti inesistenti.
+            sampledCoords = coords
+        else:
+            indices = numpy.linspace(0, len(coords) - 1, ImageService._SamplesNumber, dtype=int)
+            sampledCoords = coords[indices]
+
         logger.info(
-            "Phase 13: Sampling: %d points → %d sampled points (step=%d). Pipeline complete.",
-            len(coords), len(sampledCoords), step,
+            "Phase 13 — Sampling: %d points → %d sampled points. Pipeline complete.",
+            len(coords), len(sampledCoords),
         )
         
         return sampledCoords
