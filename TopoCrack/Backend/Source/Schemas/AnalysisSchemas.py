@@ -8,13 +8,13 @@ class Point(BaseModel):
     def ToTuple(self) -> tuple[int, int]:
         return (self.X, self.Y)
 
-class GeographicCoords:
+class GeographicCoords(BaseModel):
     # Coordinate WGS84 (lon, lat)
     Lon: float
     Lat: float
     
     def ToTuple(self) -> tuple[float, float]:
-        return (self.Lon, self.Lan)
+        return (self.Lon, self.Lat)
 
 class AnalysisRequest(BaseModel):
     ImageBytes: bytes
@@ -30,7 +30,6 @@ class AnalysisRequest(BaseModel):
             raise ValueError("The uploaded image is blank")
         
         return Value
-    
 
 class AnalysisResponse(BaseModel):
     StartCoord: GeographicCoords

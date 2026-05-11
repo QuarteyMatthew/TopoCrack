@@ -1,5 +1,5 @@
 from typing import Any, List
-from mytimeit import timeit
+from TopoCrack.Backend.test.dtw.Timer import timeit
 from joblib import Parallel, delayed
 import math
 import numpy as np
@@ -30,8 +30,7 @@ def rotate_to_horizontal(points: np.ndarray) -> np.ndarray:
 
 def scale_x_0_to_1(points: np.ndarray) -> np.ndarray:
     # Requires the set of points to start at origin (0, 0)
-    
-    start = points[0]
+
     end = points[-1]
     
     i = 0

@@ -1,5 +1,6 @@
 import geopandas
 import numpy
+import logging
 import requests, zipfile, io
 
 from pyproj import CRS, Geod, Transformer
@@ -8,6 +9,8 @@ from matplotlib import pyplot as plt
 from geopandas import GeoDataFrame
 from shapely.ops import linemerge
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Inizializzazione del calcolatore geodetico con l'elissoide WGS84
 geodCalc = Geod(ellps="WGS84")
@@ -21,55 +24,88 @@ def DownloadCoastline(resolution: str = "50m", cacheDir: str = "../Cache") -> Ge
     
     if not (coastlinePath.exists() and dotShapePath.exists() and dotShapeXPath.exists()):
         if not cachePath.exists():
+            logger.debug("Cache directory not found, creating it at '%s'...", cachePath)
             cachePath.mkdir(parents=True, exist_ok=True)
         
-        print("Coastline data doesn't exists. Proceding to download it...")
-        
+        logger.info("Coastal data not found in cache. Starting download (resolution=%s)...", resolution)
         downloadURL = f"https://naturalearth.s3.amazonaws.com/{resolution}_physical/{coastlineDir}.zip"
+        logger.debug("Download URL: %s", downloadURL)
         
         req = requests.get(downloadURL)
         req.raise_for_status()
+        logger.info("Download complete (%.1f MB). Extracting archive...", len(req.content) / 1_000_000)
         
         with zipfile.ZipFile(io.BytesIO(req.content)) as zipFile:
             zipFile.extractall(coastlinePath)
             
+        # Rimozione dei file non necessari: logghiamo quanti ne eliminiamo
+        # così è facile accorgersi se il formato del pacchetto cambia in futuro.
+        removedCount = 0
+        suffices = [".cpg", ".dbf", ".prj", ".html", ".txt"]
         for neFile in coastlinePath.iterdir():
             if not neFile.is_file():
                 continue
-            
-            suffices = [".cpg", ".dbf", ".prj", ".html", ".txt"]
             if neFile.suffix.lower() in suffices:
                 neFile.unlink()
+                removedCount += 1
+        logger.debug("Removed %d unnecessary files from the archive.", removedCount)
+    else:
+        # I file sono già stati scaricati
+        logger.info("Coastal data found in cache, skipping download.")
     
-    shapeFile = next(coastlinePath.glob("*.shp")) 
+    shapeFile = next(coastlinePath.glob("*.shp"))
+    logger.debug("Reading shapefile: '%s'", shapeFile)
+    coastlines = geopandas.read_file(shapeFile)
+    logger.info("Shapefile loaded: %d coastline features.", len(coastlines))
     
     return geopandas.read_file(shapeFile)
 
 def ExplodeToSections(coastlines: GeoDataFrame, sectionLengthMetre: int) -> GeoDataFrame:
+    logger.info("Exploding %d coastline features into sections of %d km each...", len(coastlines), sectionLengthMetre // 1000,)
+    
     featureIndecies = []
+    skippedFeatures = 0
     
     # Elaborazione di ogni coastline
     for featIndex, coastline in coastlines.iterrows():
         segments = ExplodeToGeodeticSegments(coastline.geometry, sectionLengthMetre)
-        
-        # Append delle nuove sezioni preservando il feature index
+
+        if len(segments) == 0:
+            # Una coastline che non produce sezioni è anomala ma non fatale
+            skippedFeatures += 1
+            logger.debug("Feature %d produced no sections (geometry may be too short or empty).", featIndex)
+            continue
+
         for segment in segments:
             featureIndecies.append({"featureIndex": featIndex, **segment})
-    
-    print(f"  {len(featureIndecies)} sections created from all the feature")
+
+        logger.debug("Feature %d, %d section(s).", featIndex, len(segments))
+
+    logger.info("Exploding complete: %d sections created, %d features skipped.", len(featureIndecies), skippedFeatures,)
     
     return GeoDataFrame(featureIndecies, crs=coastlines.crs).reset_index(drop=True)
 
 def NormalizeAllSections(sections: GeoDataFrame, nPoints: int) -> numpy.ndarray:
-    results = []
+    total = len(sections)
+    logger.info("Normalizing %d sections to [0,1] × [-y,y] space (%d points each)...", total, nPoints)
     
-    for _, section in sections.iterrows():
+    results = []
+    skippedCount = 0
+    
+    for idx, (_, section) in enumerate(sections.iterrows()):
+        # Log di avanzamento ogni 10%: utile perché questa funzione
+        # può girare per diversi minuti sul dataset mondiale a 10m.
+        if total > 0 and idx % max(1, total // 10) == 0:
+            logger.info("  Normalization progress: %d/%d (%.0f%%)...", idx, total, 100 * idx / total)
+        
         try:
             # Normalizza questa sezione allo spazio [0,1] × [-y,y]
             points = SectionToNormalizedPoints(section.geometry, nPoints)
+            
         except ValueError as e:
             # Skip delle sezioni degenere
-            print(f"  Skipped section ({section.featureIndex}, {section.sectionIndex}): {e}")
+            skippedCount += 1
+            logger.warning("Skipped degenerate section (feature=%s, section=%s): %s", section.featureIndex, section.sectionIndex, e,)
             points = None
         
         results.append({
@@ -80,6 +116,8 @@ def NormalizeAllSections(sections: GeoDataFrame, nPoints: int) -> numpy.ndarray:
             "points"      : points,               # Normalized points or None if failed
         })
     
+    logger.info("Normalization complete: %d sections normalized, %d skipped.", total - skippedCount, skippedCount,)
+    
     return numpy.array(results)
 
 def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) -> numpy.ndarray:
@@ -87,12 +125,16 @@ def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) ->
         return numpy.array([])
     
     # Se le coastline sono dio tipi 'MultiLineString', vengono fuse tutte in una 'LineString'
-    if coastline.geom_type == "MultiLineString":
+    if coastline.geom_type == "MultiLineString":    
         # Se le coastline sono connesse le loro 'LineString' vengono fuse
+        logger.debug("Geometry is MultiLineString, attempting merge...")
         coastline = linemerge(coastline)
         
         # Invece, se sono disconnesse, tenta il fallback per fonderle tramite una chiamata ricorsiva
         if coastline.geom_type == "MultiLineString":
+            subGeomCount = len(list(coastline.geoms))
+            logger.debug("Merge failed (disconnected sub-geometries). Falling back to recursive split on %d parts.", subGeomCount,)
+            
             sections = []
             for sectionPart in coastline.geoms:
                 sections.extend(ExplodeToGeodeticSegments(sectionPart, sectionLengthMetre))
@@ -105,6 +147,7 @@ def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) ->
     # Discard delle sezioni più corte di 1/5 della lunghezza della sezione ('sectionLengthMetre')
     minLengthMetre = sectionLengthMetre / 5
     if coastlineLength < minLengthMetre:
+        logger.debug("Coastline too short (%.0f m < %.0f m minimum), discarding.", coastlineLength, minLengthMetre)
         return numpy.array([])
     
     # Pre-calcola la distanza cumulativa tra i vertici
@@ -116,6 +159,8 @@ def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) ->
     # Le coastline di lunghezza inferiore ad 1/5 della lungezza della sezione ma superiore
     # al minimo, vengono divise a metà e ricavate due sezioni distinte
     if coastlineLength < sectionLengthMetre:
+        logger.debug("Short coastline (%.0f m): splitting into 2 half-sections.", coastlineLength)
+        
         midDistance = coastlineLength / 2
         midPoint = InterpolateGeodetic(coastlineCoords, midDistance)
 
@@ -153,6 +198,9 @@ def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) ->
         ])
         
     nSections = int(coastlineLength // sectionLengthMetre)
+    remainderLength = coastlineLength - nSections * sectionLengthMetre
+    logger.debug("Coastline %.0f m → %d full section(s) + remainder %.0f m.", coastlineLength, nSections, remainderLength)
+    
     sections = []
 
     for i in range(nSections):
@@ -197,6 +245,8 @@ def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) ->
             "endCoord"    : endPoint,
             "lengthMetre" : remainderLength,
         })
+    else:
+        logger.debug("Remainder section discarded (%.0f m < %.0f m minimum).", remainderLength, minLengthMetre)
 
     return numpy.array(sections)
 
@@ -326,7 +376,7 @@ def VisualizeCoastline(coastlines: GeoDataFrame, normalized: list):
         R_inv = numpy.array([[c, -s], [s, c]])
 
         # 1. Scale by UTM chord length  2. Rotate back  3. Translate to UTM start
-        pts_utm = (R_inv @ (item['points'] * chord_len).T).T + start_utm
+        pts_utm = (R_inv @ (item["points"] * chord_len).T).T + start_utm
 
         # Convert UTM coordinates back to WGS84 lon/lat
         lons, lats = to_wgs.transform(pts_utm[:, 0], pts_utm[:, 1])
