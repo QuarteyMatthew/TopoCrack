@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'result_screen.dart';
+import 'dart:ui' as ui;
 
 /// Modello per un punto selezionato sull'immagine
 class CrackPoint {
@@ -31,9 +32,12 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
   // Indica quale punto stiamo aspettando: 0 = start, 1 = end
   int _currentStep = 0;
 
+  double? _imageRatio;
+
   @override
   void initState() {
     super.initState();
+    _getImageRatio();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -47,6 +51,19 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
   void dispose() {
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _getImageRatio() {
+    final image = Image.file(widget.imageFile);
+    image.image.resolve(const ImageConfiguration()).addListener(
+      ImageStreamListener((ImageInfo info, bool _) {
+        if (mounted) {
+          setState(() {
+            _imageRatio = info.image.width / info.image.height;
+          });
+        }
+      }),
+    );
   }
 
   /// Converte un tap in posizione relativa rispetto all'immagine renderizzata
@@ -91,18 +108,24 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
     setState(() => _isLoading = true);
 
     try {
-      // l'URL reale de server
-      final uri = Uri.parse('http://10.0.2.2:5000/analyze'); 
+      // Carica l'immagine per ottenere le dimensioni reali in pixel
+      final decodedImage = await decodeImageFromList(widget.imageFile.readAsBytesSync());
+      final width = decodedImage.width;
+      final height = decodedImage.height;
+
+      final startX = (_startPoint!.position.dx * width).round();
+      final startY = (_startPoint!.position.dy * height).round();
+      final endX = (_endPoint!.position.dx * width).round();
+      final endY = (_endPoint!.position.dy * height).round();
+
+      final uri = Uri.parse('http://172.16.7.216:8000/api/analyze');
       final request = http.MultipartRequest('POST', uri);
 
-      // Immagine
-      request.files.add(await http.MultipartFile.fromPath('file', widget.imageFile.path));
-
-      // I due punti come campi form (coordinate relative 0.0 - 1.0)
-      request.fields['x1'] = _startPoint!.position.dx.toString();
-      request.fields['y1'] = _startPoint!.position.dy.toString();
-      request.fields['x2'] = _endPoint!.position.dx.toString();
-      request.fields['y2'] = _endPoint!.position.dy.toString();
+      request.files.add(await http.MultipartFile.fromPath('image', widget.imageFile.path));
+      request.fields['startX'] = startX.toString();
+      request.fields['startY'] = startY.toString();
+      request.fields['endX'] = endX.toString();
+      request.fields['endY'] = endY.toString();
 
       final response = await request.send();
 
@@ -112,15 +135,18 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
 
         if (mounted) {
           final startCoord = body['StartCoord'] ?? {};
-          
+          final endCoord = body['EndCoord'] ?? {};
+
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => ResultScreen(
                 imageFile: widget.imageFile,
                 startPoint: _startPoint!,
                 endPoint: _endPoint!,
-                latitude: (startCoord['Lat'] as num?)?.toDouble() ?? 0.0,
-                longitude: (startCoord['Lon'] as num?)?.toDouble() ?? 0.0,
+                startLatitude: (startCoord['Lat'] as num?)?.toDouble() ?? 0.0,
+                startLongitude: (startCoord['Lon'] as num?)?.toDouble() ?? 0.0,
+                endLatitude: (endCoord['Lat'] as num?)?.toDouble() ?? 0.0,
+                endLongitude: (endCoord['Lon'] as num?)?.toDouble() ?? 0.0,
                 coastName: body['Message'] ?? 'Analisi completata',
               ),
             ),
@@ -139,6 +165,7 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   String get _instructionText {
     switch (_currentStep) {
@@ -231,60 +258,68 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
               child: Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: GestureDetector(
-                    onTapDown: _currentStep < 2 ? _onImageTap : null,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Immagine con BoxFit.contain per vedere tutto
-                            Image.file(
-                              widget.imageFile,
-                              key: _imageKey,
-                              fit: BoxFit.contain,
-                            ),
-
-                            // Overlay scuro leggero sull'immagine
-                            Positioned.fill(
-                              child: Container(
-                                color: Colors.black.withOpacity(0.15),
-                              ),
-                            ),
-
-                            // Linea tra i due punti
-                            if (_startPoint != null && _endPoint != null)
-                              Positioned.fill(
-                                child: CustomPaint(
-                                  painter: _CrackLinePainter(
-                                    start: _startPoint!.position,
-                                    end: _endPoint!.position,
+                  child: _imageRatio == null 
+                    ? const CircularProgressIndicator()
+                    : GestureDetector(
+                        onTapDown: _currentStep < 2 ? _onImageTap : null,
+                        child: AspectRatio(
+                          aspectRatio: _imageRatio!,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              return Stack(
+                                children: [
+                                  // Immagine che riempie l'aspect ratio
+                                  Image.file(
+                                    widget.imageFile,
+                                    key: _imageKey,
+                                    fit: BoxFit.fill,
+                                    width: double.infinity,
+                                    height: double.infinity,
                                   ),
-                                ),
-                              ),
 
-                            // Punto START
-                            if (_startPoint != null)
-                              _buildDot(
-                                context,
-                                _startPoint!.position,
-                                const Color(0xFF00E5AA),
-                                'A',
-                              ),
+                                  // Overlay scuro leggero sull'immagine
+                                  Positioned.fill(
+                                    child: Container(
+                                      color: Colors.black.withOpacity(0.15),
+                                    ),
+                                  ),
 
-                            // Punto END
-                            if (_endPoint != null)
-                              _buildDot(
-                                context,
-                                _endPoint!.position,
-                                const Color(0xFFFF6B6B),
-                                'B',
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
+                                  // Linea tra i due punti
+                                  if (_startPoint != null && _endPoint != null)
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: _CrackLinePainter(
+                                          start: _startPoint!.position,
+                                          end: _endPoint!.position,
+                                        ),
+                                      ),
+                                    ),
+
+                                  // Punto START
+                                  if (_startPoint != null)
+                                    _buildDot(
+                                      context,
+                                      _startPoint!.position,
+                                      const Color(0xFF00E5AA),
+                                      'A',
+                                      constraints,
+                                    ),
+
+                                  // Punto END
+                                  if (_endPoint != null)
+                                    _buildDot(
+                                      context,
+                                      _endPoint!.position,
+                                      const Color(0xFFFF6B6B),
+                                      'B',
+                                      constraints,
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                 ),
               ),
             ),
@@ -357,45 +392,41 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
 
   /// Costruisce un punto PIN animato sull'immagine
   Widget _buildDot(
-      BuildContext context, Offset rel, Color color, String label) {
-    return LayoutBuilder(
-      builder: (ctx, constraints) {
-        final x = rel.dx * constraints.maxWidth;
-        final y = rel.dy * constraints.maxHeight;
-        return Positioned(
-          left: x - 18,
-          top: y - 18,
-          child: ScaleTransition(
-            scale: _pulseAnim,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.55),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                  ),
-                ],
+      BuildContext context, Offset rel, Color color, String label, BoxConstraints constraints) {
+    final x = rel.dx * constraints.maxWidth;
+    final y = rel.dy * constraints.maxHeight;
+    return Positioned(
+      left: x - 18,
+      top: y - 18,
+      child: ScaleTransition(
+        scale: _pulseAnim,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2.5),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.55),
+                blurRadius: 12,
+                spreadRadius: 2,
               ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                  ),
-                ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

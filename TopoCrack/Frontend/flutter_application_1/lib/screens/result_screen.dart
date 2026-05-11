@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'crack_editor_screen.dart';
 
-class ResultScreen extends StatelessWidget {
+class ResultScreen extends StatefulWidget {
   final File imageFile;
   final CrackPoint startPoint;
   final CrackPoint endPoint;
-  final double latitude;
-  final double longitude;
+  final double startLatitude;
+  final double startLongitude;
+  final double endLatitude;
+  final double endLongitude;
   final String coastName;
 
   const ResultScreen({
@@ -16,15 +18,43 @@ class ResultScreen extends StatelessWidget {
     required this.imageFile,
     required this.startPoint,
     required this.endPoint,
-    required this.latitude,
-    required this.longitude,
+    required this.startLatitude,
+    required this.startLongitude,
+    required this.endLatitude,
+    required this.endLongitude,
     required this.coastName,
   });
+
+  @override
+  State<ResultScreen> createState() => _ResultScreenState();
+}
+
+class _ResultScreenState extends State<ResultScreen> {
+  double? _imageRatio;
+
+  @override
+  void initState() {
+    super.initState();
+    _getImageRatio();
+  }
+
+  void _getImageRatio() {
+    final image = Image.file(widget.imageFile);
+    image.image.resolve(const ImageConfiguration()).addListener(
+      ImageStreamListener((ImageInfo info, bool _) {
+        if (mounted) {
+          setState(() {
+            _imageRatio = info.image.width / info.image.height;
+          });
+        }
+      }),
+    );
+  }
 
   /// Apre Google Maps con le coordinate ricevute dal server
   Future<void> _openMaps(BuildContext context) async {
     final uri = Uri.parse(
-      'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
+      'https://www.google.com/maps/dir/${widget.startLatitude},${widget.startLongitude}/${widget.endLatitude},${widget.endLongitude}',
     );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -116,20 +146,30 @@ class ResultScreen extends StatelessWidget {
                   flex: 3,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image.file(imageFile, fit: BoxFit.cover),
-                          // Overlay con la linea della crepa
-                          CustomPaint(
-                            painter: _ResultLinePainter(
-                              start: startPoint.position,
-                              end: endPoint.position,
-                            ),
-                          ),
-                        ],
+                    child: Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: _imageRatio == null
+                            ? const CircularProgressIndicator()
+                            : AspectRatio(
+                                aspectRatio: _imageRatio!,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.file(
+                                      widget.imageFile,
+                                      fit: BoxFit.fill,
+                                    ),
+                                    // Overlay con la linea della crepa
+                                    CustomPaint(
+                                      painter: _ResultLinePainter(
+                                        start: widget.startPoint.position,
+                                        end: widget.endPoint.position,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                       ),
                     ),
                   ),
@@ -175,7 +215,7 @@ class ResultScreen extends StatelessWidget {
 
                           // ─ Nome costa ─
                           Text(
-                            coastName,
+                            widget.coastName,
                             style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.w800,
@@ -186,15 +226,19 @@ class ResultScreen extends StatelessWidget {
 
                           // ─ Coordinate ─
                           Text(
-                            '${latitude.toStringAsFixed(4)}°N  ${longitude.toStringAsFixed(4)}°E',
+                            'INIZIO: ${widget.startLatitude.toStringAsFixed(4)}°N  ${widget.startLongitude.toStringAsFixed(4)}°E',
                             style: TextStyle(
                               fontSize: 13,
-                              color: isDark
-                                  ? Colors.white54
-                                  : Colors.black45,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                          Text(
+                            'FINE: ${widget.endLatitude.toStringAsFixed(4)}°N  ${widget.endLongitude.toStringAsFixed(4)}°E',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              fontFeatures: const [FontFeature.tabularFigures()],
                             ),
                           ),
 
