@@ -18,7 +18,7 @@ async def Lifespan(server: FastAPI):
     logger.info("Loading or building coastal data: this may take several minutes on first run.")
     
     try:
-        server.state.CoastalData = CoastlineService.LoadOrBuild()
+        server.state.CoastalData = CoastlineService.LoadOrBuildCoastlineIntoSlidingWindows()
         logger.info("Coastal data ready: %d sections loaded into server state.", len(server.state.CoastalData))
         
     except Exception as e:

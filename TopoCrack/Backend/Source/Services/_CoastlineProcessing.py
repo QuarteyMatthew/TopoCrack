@@ -60,6 +60,134 @@ def DownloadCoastline(resolution: str = "50m", cacheDir: str = "../Cache") -> Ge
     
     return geopandas.read_file(shapeFile)
 
+def BuildSlidingWindowDataset(coastlines: GeoDataFrame, pointSpacingKm: float, windowSize: int, stride: int, nNormalizedPoints: int) -> numpy.ndarray:
+    pointSpacingM = pointSpacingKm * 1000
+    
+    logger.info(
+        "Building sliding window dataset: pointSpacing=%.1fkm, windowSize=%d, "
+        "stride=%d → window covers %.0fkm, new window every %.0fkm.",
+        pointSpacingKm, windowSize, stride,
+        windowSize * pointSpacingKm,
+        stride * pointSpacingKm,
+    )
+    
+    windows = []
+    totalPoints = 0
+    
+    for featIndex, row in coastlines.iterrows():
+        coastlinePoints = ResampleCoastlineToPoints(row.geometry, pointSpacingM)
+        
+        if len(coastlinePoints) < windowSize:
+            logger.debug(
+                "Feature %d: too short after resampling (%d points < windowSize %d). Skipping.",
+                featIndex, len(coastlinePoints), windowSize,
+            )
+            continue
+        
+        totalPoints += len(coastlinePoints)
+        logger.debug("Feature %d: %d points after resampling.", featIndex, len(coastlinePoints))
+        
+        GenWindows = GenerateSlidingWindows(
+            featureIndex=featIndex,
+            coastlinePoints=coastlinePoints,
+            windowSize=windowSize,
+            stride=stride,
+            nNormalizedPoints=nNormalizedPoints,
+        )
+        windows.extend(GenWindows)
+        
+    validCount = sum(1 for w in windows if w["points"] is not None)
+    logger.info(
+        "Dataset built: %d total windows from %d coastline features "
+        "(%d valid, %d degenerate). Total resampled points: %d.",
+        len(windows), len(coastlines),
+        validCount, len(windows) - validCount,
+        totalPoints,
+    )
+
+    return numpy.array(windows)
+
+def ResampleCoastlineToPoints(coastline: LineString, pointSpacingM: float) -> numpy.ndarray:
+    if coastline is None or coastline.is_empty:
+        return numpy.array([])
+    
+    if coastline.geom_type == "MultiLineString":
+        coastline = linemerge(coastline)
+        
+        if coastline.geom_type == "MultiLineString":
+            allPoints = []
+            
+            for part in coastline.geoms:
+                partPoints = ResampleCoastlineToPoints(part, pointSpacingM)
+                if len(partPoints) > 0:
+                    allPoints.append(partPoints)
+                    
+            return numpy.vstack(allPoints) if allPoints else numpy.array([])
+    
+    totalLength = abs(geodCalc.geometry_length(coastline))
+    coastlineCoords = list(coastline.coords)
+    
+    if totalLength < pointSpacingM:
+        return numpy.array([])
+    
+    nPoints = int(totalLength / pointSpacingM) + 1
+    distances = numpy.linspace(0, (nPoints - 1) * pointSpacingM, nPoints)
+    
+    sampledPoints = []
+    for d in distances:
+        pt = InterpolateGeodetic(coastlineCoords, d)
+        sampledPoints.append(pt)
+        
+    return numpy.array(sampledPoints)
+
+def GenerateSlidingWindows(featureIndex: int, coastlinePoints: numpy.ndarray, windowSize: int, stride: int, nNormalizedPoints: int) -> numpy.ndarray:
+    windows = []
+    nTotal = len(coastlinePoints)
+    
+    if nTotal < windowSize:
+        logger.debug(
+            "Feature %d: only %d points available, need at least %d for one window. Skipping.",
+            featureIndex, nTotal, windowSize,
+        )
+        return windows
+    
+    nWindows = 0
+    nSkipped = 0
+    for start in range(0, nTotal - windowSize + 1, stride):
+        end = start + windowSize
+        windowCoords = coastlinePoints[start:end]
+        
+        line = LineString(windowCoords.tolist())
+        
+        try:
+            normalizedPoints = SectionToNormalizedPoints(line, nNormalizedPoints)
+            windows.append({
+                "featureIndex": featureIndex,
+                # windowStart o sectionIndex è l'indice del primo punto nella sequenza ricampionata,
+                # utile per il debug ma non necessario per il DTW.
+                "sectionIndex" : start,
+                # Le coordinate geografiche degli estremi sono quello che
+                # restituiamo al frontend come risultato finale.
+                "startCoord"  : tuple(windowCoords[0]),   # (lon, lat)
+                "endCoord"    : tuple(windowCoords[-1]),   # (lon, lat)
+                "points"      : normalizedPoints,
+            })
+            nWindows += 1
+            
+        except ValueError as e:
+            nSkipped += 1
+            logger.debug(
+                "Feature %d, window [%d:%d] skipped: %s",
+                featureIndex, start, end, e,
+            )
+        
+    logger.debug(
+        "Feature %d: %d windows generated, %d skipped (degenerate).",
+        featureIndex, nWindows, nSkipped,
+    )
+
+    return numpy.array(windows)
+    
 def ExplodeToSections(coastlines: GeoDataFrame, sectionLengthMetre: int) -> GeoDataFrame:
     logger.info("Exploding %d coastline features into sections of %d km each...", len(coastlines), sectionLengthMetre // 1000)
     

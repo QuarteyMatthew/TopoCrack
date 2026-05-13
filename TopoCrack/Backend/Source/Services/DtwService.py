@@ -117,7 +117,7 @@ class DtwService:
                 scoreRange,
             )
         
-        # DtwService._Visualize(preparedCrackPoints, coastalData, bestMatch)
+        DtwService._Visualize(preparedCrackPoints, coastalData, bestMatch)
 
         return bestMatch
     
