@@ -146,7 +146,7 @@ if sys.platform == "win32":
           
 elif sys.platform == "darwin":
     # Sistemi Mac
-    outputFile = buildDir / "DtwCore.dylib"
+    outputFile = librariesDir / "DtwCore.dylib"
     print(f"Output   : {outputFile}\n")
     
     # Compila con GCC
@@ -157,7 +157,7 @@ elif sys.platform == "darwin":
         
 else:
     # Sistemi Linux e altri sistemi Unix-like
-    outputFile = buildDir / "DtwCore.so"
+    outputFile = librariesDir / "DtwCore.so"
     print(f"Output   : {outputFile}\n")
     
     # Compila con GCC
