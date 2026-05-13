@@ -58,7 +58,8 @@ def SampleCoast(geoData: GeoDataFrame, nPoints: int) -> list:
   
   return coasts
 
-gdf = DownloadCoastline()
+print("Getting coastlines...")
+gdf = DownloadCoastline(resolution="50m")
 # print(gdf.columns)      # List all columns
 # print(gdf.info())       # Detailed info
 # print(gdf.crs)          # Coordinate reference system
@@ -67,10 +68,7 @@ gdf = DownloadCoastline()
 
 # ========= PLOT ONE COAST AT A TIME =========
 
-# Load a base map (optional)
-print("Reading world map...")
-world = gpd.read_file("../Cache/ne_50m_coastline/ne_50m_coastline.shp")
-ax = world.plot(color='white', edgecolor='black')
+_, ax = plt.subplots(figsize=(12, 8))
 
 for idx, row in gdf.iterrows():
   # costline = row['geometry']
@@ -79,7 +77,5 @@ for idx, row in gdf.iterrows():
   
   # Plot the line
   gpd.GeoDataFrame([row], geometry='geometry', crs=gdf.crs).plot(ax=ax, color=color)
-  
-  plt.pause(0.001)
 
 plt.show()
