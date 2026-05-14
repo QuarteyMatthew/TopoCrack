@@ -160,7 +160,7 @@ def GenerateSlidingWindows(featureIndex: int, coastlinePoints: numpy.ndarray, wi
         line = LineString(windowCoords.tolist())
         
         try:
-            normalizedPoints = SectionToNormalizedPoints(line, nNormalizedPoints)
+            normalizedPoints = WindowToNormalizedPoints(line, nNormalizedPoints)
             windows.append({
                 "featureIndex": featureIndex,
                 # windowStart o sectionIndex è l'indice del primo punto nella sequenza ricampionata,
@@ -187,196 +187,6 @@ def GenerateSlidingWindows(featureIndex: int, coastlinePoints: numpy.ndarray, wi
     )
 
     return numpy.array(windows)
-    
-def ExplodeToSections(coastlines: GeoDataFrame, sectionLengthMetre: int) -> GeoDataFrame:
-    logger.info("Exploding %d coastline features into sections of %d km each...", len(coastlines), sectionLengthMetre // 1000)
-    
-    featureIndecies = []
-    skippedFeatures = 0
-    
-    # Elaborazione di ogni coastline
-    for featIndex, coastline in coastlines.iterrows():
-        segments = ExplodeToGeodeticSegments(coastline.geometry, sectionLengthMetre)
-
-        if len(segments) == 0:
-            # Una coastline che non produce sezioni è anomala ma non fatale
-            skippedFeatures += 1
-            logger.debug("Feature %d produced no sections (geometry may be too short or empty).", featIndex)
-            continue
-
-        for segment in segments:
-            featureIndecies.append({"featureIndex": featIndex, **segment})
-
-        logger.debug("Feature %d, %d section(s).", featIndex, len(segments))
-
-    logger.info("Exploding complete: %d sections created, %d features skipped.", len(featureIndecies), skippedFeatures,)
-    
-    return GeoDataFrame(featureIndecies, crs=coastlines.crs).reset_index(drop=True)
-
-def NormalizeAllSections(sections: GeoDataFrame, nPoints: int) -> numpy.ndarray:
-    total = len(sections)
-    logger.info("Normalizing %d sections to [0,1] × [-y,y] space (%d points each)...", total, nPoints)
-    
-    results = []
-    skippedCount = 0
-    
-    for idx, (_, section) in enumerate(sections.iterrows()):
-        # Log di avanzamento ogni 10%: utile perché questa funzione
-        # può girare per diversi minuti sul dataset mondiale a 10m.
-        if total > 0 and idx % max(1, total // 10) == 0:
-            logger.info("  Normalization progress: %d/%d (%.0f%%)...", idx, total, 100 * idx / total)
-        
-        try:
-            # Normalizza questa sezione allo spazio [0,1] × [-y,y]
-            points = SectionToNormalizedPoints(section.geometry, nPoints)
-            
-        except ValueError as e:
-            # Skip delle sezioni degenere
-            skippedCount += 1
-            logger.warning("Skipped degenerate section (feature=%s, section=%s): %s", section.featureIndex, section.sectionIndex, e,)
-            points = None
-        
-        results.append({
-            "featureIndex": section.featureIndex, # Original feature ID
-            "sectionIndex": section.sectionIndex, # Section number within feature
-            "startCoord"  : section.startCoord,   # Original WGS84 start (for visualization)
-            "endCoord"    : section.endCoord,     # Original WGS84 end (for visualization)
-            "points"      : points,               # Normalized points or None if failed
-        })
-    
-    logger.info("Normalization complete: %d sections normalized, %d skipped.", total - skippedCount, skippedCount,)
-    
-    return numpy.array(results)
-
-def ExplodeToGeodeticSegments(coastline: LineString, sectionLengthMetre: int) -> numpy.ndarray:
-    if coastline is None or coastline.is_empty:
-        return numpy.array([])
-    
-    # Se le coastline sono dio tipi 'MultiLineString', vengono fuse tutte in una 'LineString'
-    if coastline.geom_type == "MultiLineString":    
-        # Se le coastline sono connesse le loro 'LineString' vengono fuse
-        logger.debug("Geometry is MultiLineString, attempting merge...")
-        coastline = linemerge(coastline)
-        
-        # Invece, se sono disconnesse, tenta il fallback per fonderle tramite una chiamata ricorsiva
-        if coastline.geom_type == "MultiLineString":
-            subGeomCount = len(list(coastline.geoms))
-            logger.debug("Merge failed (disconnected sub-geometries). Falling back to recursive split on %d parts.", subGeomCount,)
-            
-            sections = []
-            for sectionPart in coastline.geoms:
-                sections.extend(ExplodeToGeodeticSegments(sectionPart, sectionLengthMetre))
-            
-            return numpy.array(sections)
-            
-    coastlineLength = abs(geodCalc.geometry_length(coastline))
-    coastlineCoords = list(coastline.coords)
-    
-    # Discard delle sezioni più corte di 1/5 della lunghezza della sezione ('sectionLengthMetre')
-    minLengthMetre = sectionLengthMetre / 5
-    if coastlineLength < minLengthMetre:
-        logger.debug("Coastline too short (%.0f m < %.0f m minimum), discarding.", coastlineLength, minLengthMetre)
-        return numpy.array([])
-    
-    # Pre-calcola la distanza cumulativa tra i vertici
-    vertexDistancies = [0.0]
-    for i in range(len(coastlineCoords) - 1):
-        _, _, segmentLength = geodCalc.inv(*coastlineCoords[i], *coastlineCoords[i + 1])
-        vertexDistancies.append(vertexDistancies[-1] + segmentLength)
-        
-    # Le coastline di lunghezza inferiore ad 1/5 della lungezza della sezione ma superiore
-    # al minimo, vengono divise a metà e ricavate due sezioni distinte
-    if coastlineLength < sectionLengthMetre:
-        logger.debug("Short coastline (%.0f m): splitting into 2 half-sections.", coastlineLength)
-        
-        midDistance = coastlineLength / 2
-        midPoint = InterpolateGeodetic(coastlineCoords, midDistance)
-
-        # Prima metà: dall'inizio al punto di metà
-        start = [coastlineCoords[0]]
-        for vtxDist, coord in zip(vertexDistancies, coastlineCoords):
-            if 0 < vtxDist < midDistance:
-                start.append(coord)
-        
-        start.append(midPoint)
-        
-        # Seconda metà: dal punti di metà alla fine
-        end = [midPoint]
-        for vtxDist, coord in zip(vertexDistancies, coastlineCoords):
-            if midDistance < vtxDist < coastlineLength:
-                end.append(coord)
-        
-        end.append(coastlineCoords[-1])
-        
-        return numpy.array([
-            {
-                "geometry"    : LineString(start),
-                "sectionIndex": 0,
-                "startCoord"  : coastlineCoords[0],
-                "endCoord"    : midPoint,
-                "lengthMetre" : midDistance,
-            },
-            {
-                "geometry"    : LineString(end),
-                "sectionIndex": 1,
-                "startCoord"  : midPoint,
-                "endCoord"    : coastlineCoords[-1],
-                "lengthMetre" : coastlineLength - midDistance,
-            },
-        ])
-        
-    nSections = int(coastlineLength // sectionLengthMetre)
-    remainderLength = coastlineLength - nSections * sectionLengthMetre
-    logger.debug("Coastline %.0f m → %d full section(s) + remainder %.0f m.", coastlineLength, nSections, remainderLength)
-    
-    sections = []
-
-    for i in range(nSections):
-        startDistance = i * sectionLengthMetre
-        endDistance = startDistance + sectionLengthMetre
-
-        startPoint = InterpolateGeodetic(coastlineCoords, startDistance)
-        endPoint = InterpolateGeodetic(coastlineCoords, endDistance)
-
-        innerLine = [startPoint]
-        for vtxDist, coord in zip(vertexDistancies, coastlineCoords):
-            if startDistance < vtxDist < endDistance:
-                innerLine.append(coord)
-        innerLine.append(endPoint)
-
-        sections.append({
-            "geometry"    : LineString(innerLine),
-            "sectionIndex": i,
-            "startCoord"  : startPoint,
-            "endCoord"    : endPoint,
-            "lengthMetre" : sectionLengthMetre,
-        })
-
-    # Gestisce il resto dopo l'ultimo intervallo completo
-    remainderStart = nSections * sectionLengthMetre
-    remainderLength = coastlineLength - remainderStart
-
-    if remainderLength >= minLengthMetre:
-        startPoint = InterpolateGeodetic(coastlineCoords, remainderStart)
-        endPoint = coastlineCoords[-1]
-
-        innerLine = [startPoint]
-        for vtxDist, coord in zip(vertexDistancies, coastlineCoords):
-            if remainderStart < vtxDist < coastlineLength:
-                innerLine.append(coord)
-        innerLine.append(endPoint)
-
-        sections.append({
-            "geometry"    : LineString(innerLine),
-            "sectionIndex": nSections,
-            "startCoord"  : startPoint,
-            "endCoord"    : endPoint,
-            "lengthMetre" : remainderLength,
-        })
-    else:
-        logger.debug("Remainder section discarded (%.0f m < %.0f m minimum).", remainderLength, minLengthMetre)
-
-    return numpy.array(sections)
 
 def InterpolateGeodetic(coastlineCoords: list, midDistance: float) -> tuple:
     accumulatedDist = 0.0
@@ -404,7 +214,7 @@ def InterpolateGeodetic(coastlineCoords: list, midDistance: float) -> tuple:
     # Se abbiamo esaurito i segmenti, restituisce l'endpoint
     return coastlineCoords [-1]
 
-def SectionToNormalizedPoints(line: LineString, nPoints: int) -> numpy.ndarray:
+def WindowToNormalizedPoints(line: LineString, nPoints: int) -> numpy.ndarray:
     # Trova la longitudine centrale di questa sezione
     lonCenter = numpy.mean([c[0] for c in line.coords])
     

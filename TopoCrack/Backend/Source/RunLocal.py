@@ -19,8 +19,8 @@ logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] [%
 # --------------- 1. Carica (o rigenera) i dati costieri ---------------
 # Questa è esattamente la stessa chiamata che fa il lifespan del server.
 print("========= Phase 1: Loading of caostal data =========")
-coastalData = CoastlineService.LoadOrBuild()
-print(f"Loaded sections: {len(coastalData)}\n")
+coastalData = CoastlineService.LoadCoastalData()
+print(f"Loaded windows: {len(coastalData)}\n")
 
 # --------------- 2. Carica l'immagine di test ---------------
 # Leggiamo i byte dal disco — identico a come arrivano via HTTP.
