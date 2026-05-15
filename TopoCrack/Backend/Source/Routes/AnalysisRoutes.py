@@ -1,4 +1,5 @@
 import logging
+import numpy
 from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException
 
 from Schemas.AnalysisSchemas import AnalysisRequest, AnalysisResponse, Point, GeographicCoords 
@@ -59,7 +60,7 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
     logger.info("Invoking DtwService.FindBestMatch...")
     
     try:
-        coastalData = request.app.state.CoastalData
+        coastalData = numpy.array(request.app.state.CoastalData)
         bestMatch = DtwService.FindBestMatch(crackPoints, coastalData)
         logger.info(
             "DtwService returned best match: featureIndex=%s, sectionIndex=%s, cost=%.6f.",

@@ -47,7 +47,7 @@ _lib.DtwCost2D.argtypes = [
 class DtwService:
 
     @staticmethod
-    def FindBestMatch(crackPoints: numpy.ndarray, coastalData: list) -> dict:
+    def FindBestMatch(crackPoints: numpy.ndarray, coastalData: numpy.ndarray) -> dict:
         """
         Restituisce la sezione costiera con il DTW score più basso.
         """
@@ -65,9 +65,13 @@ class DtwService:
             float(preparedCrackPoints[:, 1].min()), float(preparedCrackPoints[:, 1].max()),
         )
         
+        rotatedCoastalData = DtwService._RotateCoastalData(coastalData)
+
         # ------------- 2. DTW parallelo -------------
         validSections = [s for s in coastalData if s["points"] is not None]
         skippedSections = len(coastalData) - len(validSections)
+
+        validRotatedSections = [s for s in rotatedCoastalData if s["points"] is not None]
 
         if skippedSections > 0:
             logger.warning(
@@ -87,6 +91,11 @@ class DtwService:
             for section in validSections
         )
 
+        rotatedResults = Parallel(n_jobs=-1, prefer="threads")(
+            delayed(DtwService._ComputeCost)(preparedCrackPoints, section)
+            for section in validRotatedSections
+        )
+
         dtwElapsed = time.perf_counter() - dtwStartTime
 
         logger.info(
@@ -96,7 +105,11 @@ class DtwService:
         
         # ------------- 3. Best match -------------
         # Trova il profilo costiero con il cost più basso
-        bestMatch  = min(results, key=lambda r: r["cost"])
+        bestNormalMatch  = min(results, key=lambda r: r["cost"])
+        bestRotatedMatch = min(rotatedResults, key=lambda r: r["cost"])
+
+        bestMatch = bestNormalMatch if bestNormalMatch["cost"] <= bestRotatedMatch["cost"] else bestRotatedMatch
+
         worstMatch = max(results, key=lambda r: r["cost"])
         
         logger.info(
@@ -208,6 +221,9 @@ class DtwService:
         
         return float(costMatrix[n, m])
     
+    def _RotateCoastalData(coastalData: numpy.ndarray) -> numpy.ndarray:
+        return numpy.flip(coastalData)
+
     @staticmethod
     def _Visualize(preparedCrackPoints: numpy.ndarray, coastalData: list, bestMatch: dict):
         _, axes = pyplot.subplots(figsize=(8, 6))
