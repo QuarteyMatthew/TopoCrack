@@ -53,9 +53,8 @@ class _ResultScreenState extends State<ResultScreen> {
 
   /// Apre Google Maps con le coordinate ricevute dal server
   Future<void> _openMaps(BuildContext context) async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/${widget.startLatitude},${widget.startLongitude}/${widget.endLatitude},${widget.endLongitude}',
-    );
+    final String urlString = 'https://www.google.com/maps/dir/?api=1&origin=${widget.startLatitude},${widget.startLongitude}&destination=${widget.endLatitude},${widget.endLongitude}&travelmode=driving';
+    final uri = Uri.parse(urlString);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
@@ -306,7 +305,7 @@ class _ResultLinePainter extends CustomPainter {
     final endPx = Offset(end.dx * size.width, end.dy * size.height);
 
     final paint = Paint()
-      ..color = const Color(0xFF00E5AA).withOpacity(0.9)
+      ..color =  Colors.white.withOpacity(0.9)
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
@@ -316,7 +315,7 @@ class _ResultLinePainter extends CustomPainter {
     // Dot start
     canvas.drawCircle(
       startPx,
-      8,
+      4,
       Paint()
         ..color = const Color(0xFF00E5AA)
         ..style = PaintingStyle.fill,
@@ -324,7 +323,7 @@ class _ResultLinePainter extends CustomPainter {
     // Dot end
     canvas.drawCircle(
       endPx,
-      8,
+      4,
       Paint()
         ..color = const Color(0xFFFF6B6B)
         ..style = PaintingStyle.fill,

@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Questa app ha bisogno di accedere alla fotocamera per scattare foto delle crepe.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Questa app ha bisogno di accedere alla tua galleria per selezionare foto di crepe.</string>
 </dict>
 </plist>

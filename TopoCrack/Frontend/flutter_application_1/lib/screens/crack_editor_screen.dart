@@ -118,7 +118,7 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
       final endX = (_endPoint!.position.dx * width).round();
       final endY = (_endPoint!.position.dy * height).round();
 
-      final uri = Uri.parse('http://172.16.7.216:8000/api/analyze');
+      final uri = Uri.parse('http://172.18.5.13:8000/api/analyze');
       final request = http.MultipartRequest('POST', uri);
 
       request.files.add(await http.MultipartFile.fromPath('image', widget.imageFile.path));
@@ -396,17 +396,17 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
     final x = rel.dx * constraints.maxWidth;
     final y = rel.dy * constraints.maxHeight;
     return Positioned(
-      left: x - 18,
-      top: y - 18,
+      left: x - 10,
+      top: y - 10,
       child: ScaleTransition(
         scale: _pulseAnim,
         child: Container(
-          width: 36,
-          height: 36,
+          width: 28,
+          height: 28,
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2.5),
+            border: Border.all(color: Colors.white, width: 2.0),
             boxShadow: [
               BoxShadow(
                 color: color.withOpacity(0.55),
@@ -421,7 +421,7 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
-                fontSize: 14,
+                fontSize: 8,
               ),
             ),
           ),
@@ -441,14 +441,14 @@ class _CrackLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.85)
+      ..color = Colors.white.withOpacity(0.9)
       ..strokeWidth = 2.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
     // Linea tratteggiata tra i due punti
     final dashPaint = Paint()
-      ..color = const Color(0xFF00E5AA).withOpacity(0.9)
+      ..color = Colors.white.withOpacity(0.9)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
