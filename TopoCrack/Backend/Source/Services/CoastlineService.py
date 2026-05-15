@@ -1,9 +1,10 @@
 import pickle
+import time
 import numpy
 import logging
 from pathlib import Path
 
-from ._CoastlineProcessing import DownloadCoastline, BuildSlidingWindowDataset
+from ._CoastlineProcessing import DownloadCoastline, BuildSlidingWindowDataset, VisualizeCoastline
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ class CoastlineService:
     
     _CachePath         = Path("Cache/NeturalEarthData")
     _PicklePath        = Path("Cache/NormalizedSections.pkl")
-    _PointSpacingKm    = 20 # distanza tra punti consecutivi
+    _PointSpacingKm    = 5  # distanza tra punti consecutivi
     _WindowSize        = 50 # punti per finestra
     _Stride            = 3  # avanzamento
     _Normalized_Points = 50 # punti DTW per finestra (uguale a windowSize)
@@ -44,6 +45,8 @@ class CoastlineService:
             CoastlineService._WindowSize * CoastlineService._PointSpacingKm,
             CoastlineService._Stride * CoastlineService._PointSpacingKm,
         )
+        
+        startTime = time.perf_counter()
         normalized = BuildSlidingWindowDataset(
             coastlines=coastlines,
             pointSpacingKm=CoastlineService._PointSpacingKm,
@@ -51,6 +54,64 @@ class CoastlineService:
             stride=CoastlineService._Stride,
             nNormalizedPoints=CoastlineService._Normalized_Points,
         )
+        elapsed = time.perf_counter() - startTime
+        logger.info("Sliding windows Build 1: %.6f", elapsed)
+        
+        startTime = time.perf_counter()
+        normalized = numpy.concatenate((normalized, BuildSlidingWindowDataset(
+            coastlines=coastlines,
+            pointSpacingKm=CoastlineService._PointSpacingKm * 2,
+            windowSize=CoastlineService._WindowSize,
+            stride=CoastlineService._Stride,
+            nNormalizedPoints=CoastlineService._Normalized_Points,
+        )))
+        elapsed = time.perf_counter() - startTime
+        logger.info("Sliding windows Build 2: %.6f", elapsed)
+        
+        startTime = time.perf_counter()
+        normalized = numpy.concatenate((normalized, BuildSlidingWindowDataset(
+            coastlines=coastlines,
+            pointSpacingKm=CoastlineService._PointSpacingKm * 4,
+            windowSize=CoastlineService._WindowSize,
+            stride=CoastlineService._Stride,
+            nNormalizedPoints=CoastlineService._Normalized_Points,
+        )))
+        elapsed = time.perf_counter() - startTime
+        logger.info("Sliding windows Build 3: %.6f", elapsed)
+        
+        startTime = time.perf_counter()
+        normalized = numpy.concatenate((normalized, BuildSlidingWindowDataset(
+            coastlines=coastlines,
+            pointSpacingKm=CoastlineService._PointSpacingKm * 10,
+            windowSize=CoastlineService._WindowSize,
+            stride=CoastlineService._Stride,
+            nNormalizedPoints=CoastlineService._Normalized_Points,
+        )))
+        elapsed = time.perf_counter() - startTime
+        logger.info("Sliding windows Build 4: %.6f", elapsed)
+        
+        startTime = time.perf_counter()
+        normalized = numpy.concatenate((normalized, BuildSlidingWindowDataset(
+            coastlines=coastlines,
+            pointSpacingKm=CoastlineService._PointSpacingKm * 20,
+            windowSize=CoastlineService._WindowSize * 2,
+            stride=CoastlineService._Stride - 1,
+            nNormalizedPoints=CoastlineService._Normalized_Points * 2,
+        )))
+        elapsed = time.perf_counter() - startTime
+        logger.info("Sliding windows Build 5: %.6f", elapsed)
+        
+        startTime = time.perf_counter()
+        normalized = numpy.concatenate((normalized, BuildSlidingWindowDataset(
+            coastlines=coastlines,
+            pointSpacingKm=CoastlineService._PointSpacingKm * 40,
+            windowSize=CoastlineService._WindowSize * 4,
+            stride=CoastlineService._Stride - 2,
+            nNormalizedPoints=CoastlineService._Normalized_Points * 4,
+        )))
+        elapsed = time.perf_counter() - startTime
+        logger.info("Sliding windows Build 6: %.6f", elapsed)
+        
         logger.info("Step 2/2 complete: %d windows generated.", len(normalized))
 
         logger.info("Saving to '%s'...", CoastlineService._PicklePath)
@@ -63,5 +124,5 @@ class CoastlineService:
         logger.info("Pickle saved (%.1f MB). Returning %d windows.", savedSizeMb, len(normalized))
 
         return normalized
-
+    
 # CoastlineService.LoadOrBuild()

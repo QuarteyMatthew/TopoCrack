@@ -56,6 +56,8 @@ class DtwService:
         
         # ------------- 1. Preparazione dei punti -------------
         preparedCrackPoints = DtwService._PreparePoints(crackPoints)
+        rotatedCrackPoints = DtwService._RotateCrackPoints180(preparedCrackPoints)
+        
         logger.debug(
             "Crack points prepared: start=(%.3f, %.3f), end=(%.3f, %.3f). "
             "x range=[%.3f, %.3f], y range=[%.3f, %.3f].",
@@ -64,81 +66,47 @@ class DtwService:
             float(preparedCrackPoints[:, 0].min()), float(preparedCrackPoints[:, 0].max()),
             float(preparedCrackPoints[:, 1].min()), float(preparedCrackPoints[:, 1].max()),
         )
+
+        validWindows = [w for w in coastalData if w["points"] is not None]
+        skippedCount = len(coastalData) - len(validWindows)
         
-        rotatedCoastalData = DtwService._RotateCoastalData(coastalData)
-
-        # ------------- 2. DTW parallelo -------------
-        validSections = [s for s in coastalData if s["points"] is not None]
-        skippedSections = len(coastalData) - len(validSections)
-
-        validRotatedSections = [s for s in rotatedCoastalData if s["points"] is not None]
-
-        if skippedSections > 0:
+        if skippedCount > 0:
             logger.warning(
-                "%d coastal sections skipped (points=None). "
-                "%d valid sections will be compared.",
-                skippedSections, len(validSections),
+                "%d windows skipped (points=None). %d valid windows will be compared.",
+                skippedCount, len(validWindows),
             )
         else:
-            logger.info("All %d coastal sections are valid. Starting parallel DTW...", len(validSections))
-
+            logger.info("All %d windows are valid. Starting parallel DTW...", len(validWindows))
+        
+        # ------------- 2. DTW parallelo -------------
         # Misuriamo il tempo totale del DTW: è la parte più lenta dell'intera
         # pipeline e il suo monitoraggio è fondamentale per valutare la scalabilità.
+        bestCost = numpy.inf
+        bestMatch = None
+        
         dtwStartTime = time.perf_counter()
-
-        results = Parallel(n_jobs=-1, prefer="threads")(
-            delayed(DtwService._ComputeCost)(preparedCrackPoints, section)
-            for section in validSections
-        )
-
-        rotatedResults = Parallel(n_jobs=-1, prefer="threads")(
-            delayed(DtwService._ComputeCost)(preparedCrackPoints, section)
-            for section in validRotatedSections
-        )
-
+        
+        for window in validWindows:
+            normalCost  = DtwService._DtwCostC(preparedCrackPoints, window["points"])
+            rotatedCost = DtwService._DtwCostC(rotatedCrackPoints,  window["points"])
+            cost        = min(normalCost, rotatedCost)
+            
+            if cost < bestCost:
+                bestCost = cost
+                bestMatch = { **window, "cost": cost }
+        
         dtwElapsed = time.perf_counter() - dtwStartTime
 
         logger.info(
-            "Parallel DTW complete: %d comparisons in %.2f seconds (%.1f comparisons/sec).",
-            len(results), dtwElapsed, len(results) / max(dtwElapsed, 1e-9)
+            "Best match:  featureIndex=%s, sectionIndex=%s, cost=%.6f. ",
+            bestMatch["featureIndex"], bestMatch["sectionIndex"], bestMatch["cost"]
         )
         
-        # ------------- 3. Best match -------------
-        # Trova il profilo costiero con il cost più basso
-        bestNormalMatch  = min(results, key=lambda r: r["cost"])
-        bestRotatedMatch = min(rotatedResults, key=lambda r: r["cost"])
-
-        bestMatch = bestNormalMatch if bestNormalMatch["cost"] <= bestRotatedMatch["cost"] else bestRotatedMatch
-
-        worstMatch = max(results, key=lambda r: r["cost"])
+        logger.info("elapsed %.6fs", dtwElapsed)
         
-        logger.info(
-            "Best match:  featureIndex=%s, sectionIndex=%s, cost=%.6f. "
-            "Worst match: cost=%.6f. Score range: %.6f.",
-            bestMatch["featureIndex"], bestMatch["sectionIndex"], bestMatch["cost"],
-            worstMatch["cost"], worstMatch["cost"] - bestMatch["cost"],
-        )
-        
-        # Un range di score molto piccolo è un segnale di warning: significa
-        # che tutti i profili costieri hanno punteggi simili, il che indica
-        # che la crepa preparata potrebbe essere degenere (es. quasi piatta).
-        scoreRange = worstMatch["cost"] - bestMatch["cost"]
-        if scoreRange < 0.01:
-            logger.warning(
-                "Very small DTW score range (%.6f). The crack shape may be too simple "
-                "or degenerate to discriminate between coastal profiles.",
-                scoreRange,
-            )
-        
-        DtwService._Visualize(preparedCrackPoints, coastalData, bestMatch)
+        DtwService._Visualize(preparedCrackPoints, rotatedCrackPoints, bestMatch)
 
         return bestMatch
-    
-    @staticmethod
-    def _ComputeCost(crackPoints: numpy.ndarray, section: dict) -> dict:
-        # cost = DtwService._DtwCostPython(crackPoints, section["points"])
-        cost = DtwService._DtwCostC(crackPoints, section["points"])
-        return { **section, "cost": cost }
     
     @staticmethod
     def _PreparePoints(crackPoints: numpy.ndarray) -> numpy.ndarray:
@@ -190,6 +158,19 @@ class DtwService:
         return rotatedPoints
     
     @staticmethod
+    def _RotateCrackPoints180(preparedCrackPoints: numpy.ndarray) -> numpy.ndarray:
+        nPoints = len(preparedCrackPoints)
+        result  = numpy.empty((nPoints, 2))
+        center  = numpy.mean(preparedCrackPoints, axis=0)
+        
+        for i, point in enumerate(preparedCrackPoints):
+            centredPoints = point - center
+            rotatedPoints = centredPoints * -1
+            result[i]     = rotatedPoints + center
+            
+        return result
+    
+    @staticmethod
     def _DtwCostC(pointsA: numpy.ndarray, pointsB: numpy.ndarray) -> float:
         # numpy.ascontiguousarray garantisce che l'array sia in memoria contigua
         # (row-major, C-style): indispensabile per passarlo a C senza copie extra
@@ -220,22 +201,14 @@ class DtwService:
                 )
         
         return float(costMatrix[n, m])
-    
-    def _RotateCoastalData(coastalData: numpy.ndarray) -> numpy.ndarray:
-        return numpy.flip(coastalData)
 
     @staticmethod
-    def _Visualize(preparedCrackPoints: numpy.ndarray, coastalData: list, bestMatch: dict):
+    def _Visualize(preparedCrackPoints: numpy.ndarray, rotatedCrackPoints: numpy.ndarray, bestMatch: dict):
         _, axes = pyplot.subplots(figsize=(8, 6))
-        axes.plot(preparedCrackPoints[:, 0], preparedCrackPoints[:, 1], label="User path", color="black", linewidth=2)
+        axes.plot(preparedCrackPoints[:, 0], preparedCrackPoints[:, 1], label="Crack", color="black", linewidth=2)
+        axes.plot(rotatedCrackPoints[:, 0], rotatedCrackPoints[:, 1], label="Rotated crack (180°)", color="red", linewidth=2)
         
-        bestCoastalData = next(
-        (coast for coast in coastalData 
-            if coast["featureIndex"] == bestMatch["featureIndex"] and coast["sectionIndex"] == bestMatch["sectionIndex"]),
-            None
-        )
-
-        points = bestCoastalData["points"]
+        points = bestMatch["points"]
         axes.plot(points[:, 0], points[:, 1], label=f"{bestMatch['featureIndex']}_{bestMatch['sectionIndex']} ({bestMatch['cost']:.4f})")
         
         axes.set_aspect("equal", adjustable="box")
