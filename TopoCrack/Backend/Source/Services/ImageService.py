@@ -308,20 +308,46 @@ class ImageService:
         # Questo garantisce ESATTAMENTE _SamplesNumber punti in output,
         # qualunque sia la lunghezza di coords — anche se coords ha meno punti
         # del numero di campioni desiderato (caso gestito sotto).
+        index = 0
+        result = []
         if len(coords) <= ImageService._SamplesNumber:
             # Se la crepa ha già meno punti del target, la teniamo com'è.
             # Non ha senso "aggiungere" punti inesistenti.
-            sampledCoords = coords
+            result.append({
+                "crackID": index,
+                "points": coords
+            })
+            index += 1
         else:
             indices = numpy.linspace(0, len(coords) - 1, ImageService._SamplesNumber, dtype=int)
-            sampledCoords = coords[indices]
+            result.append({
+                "crackID": index,
+                "points": coords[indices]
+            })
+            index += 1
+            
+            if len(coords) >= ImageService._SamplesNumber * 2:
+                indices = numpy.linspace(0, len(coords) - 1, ImageService._SamplesNumber * 2, dtype=int)
+                result.append({
+                    "crackID": index,
+                    "points": coords[indices]
+                })
+                index += 1
+                
+            if len(coords) >= ImageService._SamplesNumber * 4:
+                indices = numpy.linspace(0, len(coords) - 1, ImageService._SamplesNumber * 4, dtype=int)
+                result.append({
+                    "crackID": index,
+                    "points": coords[indices]
+                })
+                index += 1
 
-        logger.info(
-            "Phase 13 — Sampling: %d points → %d sampled points. Pipeline complete.",
-            len(coords), len(sampledCoords),
-        )
+        # logger.info(
+        #     "Phase 13 — Sampling: %d points → 1. %d sampled points, 2. %d sampled points, 3. %d sampled points. Pipeline complete.",
+        #     len(coords), len(result[0]["points"]), len(result[1]["points"]), len(result[2]["points"])
+        # )
         
-        return sampledCoords
+        return numpy.array(result, dtype=object)
     
     @staticmethod
     def _FindBestNodePair(graph: object, userStart: Point, userEnd: Point) -> tuple[int, int]:
