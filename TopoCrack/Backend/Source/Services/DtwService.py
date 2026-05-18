@@ -47,7 +47,7 @@ _lib.DtwCost2D.argtypes = [
 class DtwService:
 
     @staticmethod
-    def FindBestMatch(crackPoints: numpy.ndarray, coastalData: list) -> dict:
+    def FindBestMatch(crackPoints: numpy.ndarray, coastalData: numpy.ndarray) -> tuple[dict, float]:
         """
         Restituisce la sezione costiera con il DTW score più basso.
         """
@@ -55,7 +55,10 @@ class DtwService:
         logger.info("FindBestMatch called with %d crack points and %d coastal sections.", len(crackPoints), len(coastalData))
         
         # ------------- 1. Preparazione dei punti -------------
+        # Prepara la crepa e la sua versione riflessa sull'asse x.
         preparedCrackPoints = DtwService._PreparePoints(crackPoints)
+        reflectedCrackPoints = DtwService._YReflectCrackPoints(preparedCrackPoints)
+        
         logger.debug(
             "Crack points prepared: start=(%.3f, %.3f), end=(%.3f, %.3f). "
             "x range=[%.3f, %.3f], y range=[%.3f, %.3f].",
@@ -64,68 +67,59 @@ class DtwService:
             float(preparedCrackPoints[:, 0].min()), float(preparedCrackPoints[:, 0].max()),
             float(preparedCrackPoints[:, 1].min()), float(preparedCrackPoints[:, 1].max()),
         )
-        
-        # ------------- 2. DTW parallelo -------------
-        validSections = [s for s in coastalData if s["points"] is not None]
-        skippedSections = len(coastalData) - len(validSections)
 
-        if skippedSections > 0:
+        # Aggiungiamo il controllo di curvatura: un rapporto percorso/corda > 3
+        # indica una crepa che si arrotola su se stessa e probabilmente non
+        # troverà mai un buon match in nessuna coastline reale.
+        pathLength     = float(numpy.sum(numpy.linalg.norm(numpy.diff(preparedCrackPoints, axis=0), axis=1)))
+        chordLength    = float(preparedCrackPoints[-1, 0])  # = 1.0 dopo la scala
+        curvatureRatio = pathLength / max(chordLength, 1e-10)
+        if curvatureRatio > 3.0:
             logger.warning(
-                "%d coastal sections skipped (points=None). "
-                "%d valid sections will be compared.",
-                skippedSections, len(validSections),
+                "High curvature ratio (%.2f): the crack path is %.1fx longer than "
+                "its chord. The DTW match may be unreliable — no coastline has "
+                "this degree of self-folding. Consider re-selecting the crack endpoints.",
+                curvatureRatio, curvatureRatio,
+            )
+
+        validWindows = [w for w in coastalData if w["points"] is not None]
+        skippedCount = len(coastalData) - len(validWindows)
+        
+        if skippedCount > 0:
+            logger.warning(
+                "%d windows skipped (points=None). %d valid windows will be compared.",
+                skippedCount, len(validWindows),
             )
         else:
-            logger.info("All %d coastal sections are valid. Starting parallel DTW...", len(validSections))
-
+            logger.info("All %d windows are valid. Starting DTW...", len(validWindows))
+        
+        # ------------- 2. DTW parallelo -------------
         # Misuriamo il tempo totale del DTW: è la parte più lenta dell'intera
         # pipeline e il suo monitoraggio è fondamentale per valutare la scalabilità.
+        bestCost = numpy.inf
+        bestMatch = None
+        
         dtwStartTime = time.perf_counter()
-
-        results = Parallel(n_jobs=-1, prefer="threads")(
-            delayed(DtwService._ComputeCost)(preparedCrackPoints, section)
-            for section in validSections
-        )
-
+        
+        for window in validWindows:
+            normalCost  = DtwService._DtwCostC(preparedCrackPoints, window["points"])
+            rotatedCost = DtwService._DtwCostC(reflectedCrackPoints,  window["points"])
+            cost        = min(normalCost, rotatedCost)
+            
+            if cost < bestCost:
+                bestCost = cost
+                bestMatch = { **window, "cost": cost }
+        
         dtwElapsed = time.perf_counter() - dtwStartTime
 
         logger.info(
-            "Parallel DTW complete: %d comparisons in %.2f seconds (%.1f comparisons/sec).",
-            len(results), dtwElapsed, len(results) / max(dtwElapsed, 1e-9)
+            "Best match: featureIndex=%s, sectionIndex=%s, cost=%.6f. Elapsed: %.6fs.",
+            bestMatch["featureIndex"], bestMatch["sectionIndex"], bestMatch["cost"], dtwElapsed,
         )
         
-        # ------------- 3. Best match -------------
-        # Trova il profilo costiero con il cost più basso
-        bestMatch  = min(results, key=lambda r: r["cost"])
-        worstMatch = max(results, key=lambda r: r["cost"])
-        
-        logger.info(
-            "Best match:  featureIndex=%s, sectionIndex=%s, cost=%.6f. "
-            "Worst match: cost=%.6f. Score range: %.6f.",
-            bestMatch["featureIndex"], bestMatch["sectionIndex"], bestMatch["cost"],
-            worstMatch["cost"], worstMatch["cost"] - bestMatch["cost"],
-        )
-        
-        # Un range di score molto piccolo è un segnale di warning: significa
-        # che tutti i profili costieri hanno punteggi simili, il che indica
-        # che la crepa preparata potrebbe essere degenere (es. quasi piatta).
-        scoreRange = worstMatch["cost"] - bestMatch["cost"]
-        if scoreRange < 0.01:
-            logger.warning(
-                "Very small DTW score range (%.6f). The crack shape may be too simple "
-                "or degenerate to discriminate between coastal profiles.",
-                scoreRange,
-            )
-        
-        # DtwService._Visualize(preparedCrackPoints, coastalData, bestMatch)
+        # DtwService._Visualize(preparedCrackPoints, reflectedCrackPoints, bestMatch)
 
-        return bestMatch
-    
-    @staticmethod
-    def _ComputeCost(crackPoints: numpy.ndarray, section: dict) -> dict:
-        # cost = DtwService._DtwCostPython(crackPoints, section["points"])
-        cost = DtwService._DtwCostC(crackPoints, section["points"])
-        return { **section, "cost": cost }
+        return bestMatch, curvatureRatio
     
     @staticmethod
     def _PreparePoints(crackPoints: numpy.ndarray) -> numpy.ndarray:
@@ -177,6 +171,16 @@ class DtwService:
         return rotatedPoints
     
     @staticmethod
+    def _YReflectCrackPoints(preparedCrackPoints: numpy.ndarray) -> numpy.ndarray:
+        return preparedCrackPoints * numpy.array([1.0, -1.0])
+
+        center = numpy.mean(preparedCrackPoints, axis=0)
+        points = preparedCrackPoints - center
+        points = points * numpy.array([1.0, -1.0])
+
+        return points + center
+    
+    @staticmethod
     def _DtwCostC(pointsA: numpy.ndarray, pointsB: numpy.ndarray) -> float:
         # numpy.ascontiguousarray garantisce che l'array sia in memoria contigua
         # (row-major, C-style): indispensabile per passarlo a C senza copie extra
@@ -207,19 +211,14 @@ class DtwService:
                 )
         
         return float(costMatrix[n, m])
-    
-    @staticmethod
-    def _Visualize(preparedCrackPoints: numpy.ndarray, coastalData: list, bestMatch: dict):
-        _, axes = pyplot.subplots(figsize=(8, 6))
-        axes.plot(preparedCrackPoints[:, 0], preparedCrackPoints[:, 1], label="User path", color="black", linewidth=2)
-        
-        bestCoastalData = next(
-        (coast for coast in coastalData 
-            if coast["featureIndex"] == bestMatch["featureIndex"] and coast["sectionIndex"] == bestMatch["sectionIndex"]),
-            None
-        )
 
-        points = bestCoastalData["points"]
+    @staticmethod
+    def _Visualize(preparedCrackPoints: numpy.ndarray, rotatedCrackPoints: numpy.ndarray, bestMatch: dict):
+        _, axes = pyplot.subplots(figsize=(8, 6))
+        axes.plot(preparedCrackPoints[:, 0], preparedCrackPoints[:, 1], label="Crack", color="black", linewidth=2)
+        axes.plot(rotatedCrackPoints[:, 0], rotatedCrackPoints[:, 1], label="Reflected crack (y → -y)", color="red", linewidth=2)
+        
+        points = bestMatch["points"]
         axes.plot(points[:, 0], points[:, 1], label=f"{bestMatch['featureIndex']}_{bestMatch['sectionIndex']} ({bestMatch['cost']:.4f})")
         
         axes.set_aspect("equal", adjustable="box")

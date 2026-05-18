@@ -12,15 +12,15 @@ logger = logging.getLogger(__name__)
 class ImageService:
     
     # Parametri della pipeline
-    _MaxDisplayLength:                int   = 600
-    _ClaheClipLimit:                  int   = 3
-    _BilateralDiameter:               int   = 7
-    _BilateralSigmaColor:             int   = 100
-    _BilateralSigmaSpace:             int   = 120
-    _DarkestPixelPercentageBilateral: int   = 25
-    _DarkestPixelPercentageCanny:     int   = 5
-    _MorphAnchor:                     int   = 3
-    _SamplesNumber:                   int   = 50
+    _MaxDisplayLength:                int = 600
+    _ClaheClipLimit:                  int = 3
+    _BilateralDiameter:               int = 7
+    _BilateralSigmaColor:             int = 100
+    _BilateralSigmaSpace:             int = 120
+    _DarkestPixelPercentageBilateral: int = 25
+    _DarkestPixelPercentageCanny:     int = 5
+    _MorphAnchor:                     int = 3
+    _SamplesNumber:                   int = 50
     
     @staticmethod
     def ExtractCrackPoints(imageBytes: bytes, userStart: Point, userEnd: Point) -> numpy.ndarray:

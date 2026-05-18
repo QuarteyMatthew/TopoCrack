@@ -1,4 +1,5 @@
 import logging
+import numpy
 from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException
 
 from Schemas.AnalysisSchemas import AnalysisRequest, AnalysisResponse, Point, GeographicCoords 
@@ -59,8 +60,8 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
     logger.info("Invoking DtwService.FindBestMatch...")
     
     try:
-        coastalData = request.app.state.CoastalData
-        bestMatch = DtwService.FindBestMatch(crackPoints, coastalData)
+        coastalData = numpy.array(request.app.state.CoastalData)
+        bestMatch, curvatureRatio = DtwService.FindBestMatch(crackPoints, coastalData)
         logger.info(
             "DtwService returned best match: featureIndex=%s, sectionIndex=%s, cost=%.6f.",
             bestMatch["featureIndex"], bestMatch["sectionIndex"], bestMatch["cost"]
@@ -70,6 +71,14 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
         logger.error("Unexpected error in DtwService: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error during DTW computation.")
     
+    warningMessage = None
+    if curvatureRatio > 1.5:
+        warningMessage = (
+            "The selected crack traces an outline rather than a linear path. "
+            "For best results, select only one side of the shape — "
+            "the algorithm compares linear coastal profiles."
+        )
+
     # ---------- 4. Costruzione e restituzione della risposta ----------
     startCoord = bestMatch["startCoord"]
     endCoord = bestMatch["endCoord"]
@@ -79,7 +88,8 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
         EndCoord   = GeographicCoords(Lon=endCoord[0], Lat=endCoord[1]),
         DtwScore   = bestMatch["cost"],
         StatusCode = 200,
-        Message = "Analysis successfully completed",
+        Message    = "Analysis successfully completed",
+        Warning    = warningMessage,  # None se la crepa è lineare
     )
     
     logger.info(

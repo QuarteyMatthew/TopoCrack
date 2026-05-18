@@ -13,8 +13,8 @@
  * 
  * @param pointsA matrice leneare di punti [n x 2]
  * @param pointsB matrice leneare di punti [m x 2]
- * @param countA quantità di punti presenti in pointsA
- * @param countB quantità di punti presenti in pointsB
+ * @param countA  quantità di punti presenti in pointsA
+ * @param countB  quantità di punti presenti in pointsB
  * 
  * @return costo finale del DTW
  */
