@@ -18,8 +18,8 @@ class GeographicCoords(BaseModel):
 
 class AnalysisRequest(BaseModel):
     ImageBytes: bytes
-    UserStart: Point
-    UserEnd: Point
+    UserStart : Point
+    UserEnd   : Point
     
     model_config = {"arbitrary_types_allowed": True}
     
@@ -33,8 +33,9 @@ class AnalysisRequest(BaseModel):
 
 class AnalysisResponse(BaseModel):
     StartCoord: GeographicCoords
-    EndCoord: GeographicCoords
-    DtwScore: float
+    EndCoord  : GeographicCoords
+    DtwScore  : float
     
     StatusCode: int
-    Message: str
+    Message   : str
+    Warning   : str | None = None

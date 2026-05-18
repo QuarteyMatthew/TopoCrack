@@ -275,7 +275,7 @@ def VisualizeCoastline(coastlines: GeoDataFrame, normalized: list):
     # Step 3: Generate deterministic colors for each section
     colors = [ColorForSection(item['featureIndex'], item['sectionIndex']) for item in normalized]
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    _, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     # --- Plot 1: Original coastlines (WGS84 coordinates) ---
     coastlines.plot(ax=axes[0], color='steelblue', lw=0.5)

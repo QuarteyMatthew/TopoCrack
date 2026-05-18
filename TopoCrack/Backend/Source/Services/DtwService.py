@@ -47,7 +47,7 @@ _lib.DtwCost2D.argtypes = [
 class DtwService:
 
     @staticmethod
-    def FindBestMatch(crackPoints: numpy.ndarray, coastalData: numpy.ndarray) -> dict:
+    def FindBestMatch(crackPoints: numpy.ndarray, coastalData: numpy.ndarray) -> tuple[dict, float]:
         """
         Restituisce la sezione costiera con il DTW score più basso.
         """
@@ -55,22 +55,32 @@ class DtwService:
         logger.info("FindBestMatch called with %d crack points and %d coastal sections.", len(crackPoints), len(coastalData))
         
         # ------------- 1. Preparazione dei punti -------------
+        # Prepara la crepa e la sua versione riflessa sull'asse x.
         preparedCrackPoints = DtwService._PreparePoints(crackPoints)
-        if len(preparedCrackPoints) == 0:
-            logger.error("No valid crack points were prepared for DTW.")
-            raise ValueError("Unable to prepare crack points for DTW.")
-
-        rotatedCrackPoints = DtwService._RotateCrackPoints180(preparedCrackPoints)
-        firstPrepared = preparedCrackPoints[0]["points"]
+        reflectedCrackPoints = DtwService._YReflectCrackPoints(preparedCrackPoints)
         
         logger.debug(
             "Crack points prepared: start=(%.3f, %.3f), end=(%.3f, %.3f). "
             "x range=[%.3f, %.3f], y range=[%.3f, %.3f].",
-            firstPrepared[0, 0], firstPrepared[0, 1],
-            firstPrepared[-1, 0], firstPrepared[-1, 1],
-            float(firstPrepared[:, 0].min()), float(firstPrepared[:, 0].max()),
-            float(firstPrepared[:, 1].min()), float(firstPrepared[:, 1].max()),
+            preparedCrackPoints[0, 0],  preparedCrackPoints[0, 1],
+            preparedCrackPoints[-1, 0], preparedCrackPoints[-1, 1],
+            float(preparedCrackPoints[:, 0].min()), float(preparedCrackPoints[:, 0].max()),
+            float(preparedCrackPoints[:, 1].min()), float(preparedCrackPoints[:, 1].max()),
         )
+
+        # Aggiungiamo il controllo di curvatura: un rapporto percorso/corda > 3
+        # indica una crepa che si arrotola su se stessa e probabilmente non
+        # troverà mai un buon match in nessuna coastline reale.
+        pathLength     = float(numpy.sum(numpy.linalg.norm(numpy.diff(preparedCrackPoints, axis=0), axis=1)))
+        chordLength    = float(preparedCrackPoints[-1, 0])  # = 1.0 dopo la scala
+        curvatureRatio = pathLength / max(chordLength, 1e-10)
+        if curvatureRatio > 3.0:
+            logger.warning(
+                "High curvature ratio (%.2f): the crack path is %.1fx longer than "
+                "its chord. The DTW match may be unreliable — no coastline has "
+                "this degree of self-folding. Consider re-selecting the crack endpoints.",
+                curvatureRatio, curvatureRatio,
+            )
 
         validWindows = [w for w in coastalData if w["points"] is not None]
         skippedCount = len(coastalData) - len(validWindows)
@@ -81,7 +91,7 @@ class DtwService:
                 skippedCount, len(validWindows),
             )
         else:
-            logger.info("All %d windows are valid. Starting parallel DTW...", len(validWindows))
+            logger.info("All %d windows are valid. Starting DTW...", len(validWindows))
         
         # ------------- 2. DTW parallelo -------------
         # Misuriamo il tempo totale del DTW: è la parte più lenta dell'intera
@@ -92,111 +102,83 @@ class DtwService:
         dtwStartTime = time.perf_counter()
         
         for window in validWindows:
-            for normalCrack, rotatedCrack in zip(preparedCrackPoints, rotatedCrackPoints):
-                normalCost  = DtwService._DtwCostC(normalCrack["points"], window["points"])
-                rotatedCost = DtwService._DtwCostC(rotatedCrack["points"],  window["points"])
-                cost        = min(normalCost, rotatedCost)
-                
-                if cost < bestCost:
-                    bestCost = cost
-                    bestMatch = { **window, "cost": cost }
+            normalCost  = DtwService._DtwCostC(preparedCrackPoints, window["points"])
+            rotatedCost = DtwService._DtwCostC(reflectedCrackPoints,  window["points"])
+            cost        = min(normalCost, rotatedCost)
+            
+            if cost < bestCost:
+                bestCost = cost
+                bestMatch = { **window, "cost": cost }
         
         dtwElapsed = time.perf_counter() - dtwStartTime
 
         logger.info(
-            "Best match:  featureIndex=%s, sectionIndex=%s, cost=%.6f. ",
-            bestMatch["featureIndex"], bestMatch["sectionIndex"], bestMatch["cost"]
+            "Best match: featureIndex=%s, sectionIndex=%s, cost=%.6f. Elapsed: %.6fs.",
+            bestMatch["featureIndex"], bestMatch["sectionIndex"], bestMatch["cost"], dtwElapsed,
         )
         
-        logger.info("elapsed %.6fs", dtwElapsed)
-        
-        DtwService._Visualize(preparedCrackPoints, rotatedCrackPoints, bestMatch)
+        # DtwService._Visualize(preparedCrackPoints, reflectedCrackPoints, bestMatch)
 
-        return bestMatch
+        return bestMatch, curvatureRatio
     
     @staticmethod
     def _PreparePoints(crackPoints: numpy.ndarray) -> numpy.ndarray:
-        result = []
-        for crack in crackPoints:
-            if "points" not in crack:
-                continue
-            
-            points = crack["points"]
-            
-            # -------- 1. Traslazione all'origine --------
-            traslatedPoints = points - points[0]
+        # -------- 1. Traslazione all'origine --------
+        traslatedPoints = crackPoints - crackPoints[0]
 
-            # -------- 2. Calcola la rotazione -------
-            traslatedEnd = traslatedPoints[-1]
+        # -------- 2. Calcola la rotazione -------
+        traslatedEnd = traslatedPoints[-1]
 
-            # Calcola l'arcotangente
-            angle = math.atan2(traslatedEnd[1], traslatedEnd[0])
+        # Calcola l'arcotangente
+        angle = math.atan2(traslatedEnd[1], traslatedEnd[0])
 
-            logger.debug("_PreparePoints: rotation angle=%.4f rad (%.1f deg).", angle, math.degrees(angle))
-            
-            # Matrice di rotazione
-            cos, sin = numpy.cos(-angle), numpy.sin(-angle)
-            rotationMatrix = numpy.array([[cos, -sin], [sin, cos]])
-
-            # -------- 3. Applicazione della rotazione a tutti i punti -------
-            rotatedPoints = numpy.dot(traslatedPoints, rotationMatrix.T)
+        logger.debug("_PreparePoints: rotation angle=%.4f rad (%.1f deg).", angle, math.degrees(angle))
         
-            # -------- 4. Forza y=0 all'inizio e alla fine -------
-            rotatedPoints[0, 1] = 0.0
-            rotatedPoints[-1, 1] = 0.0
-        
-            # -------- 5. Scala uniformemente -------
-            rotatedEnd = rotatedPoints[-1]
+        # Matrice di rotazione
+        cos, sin = numpy.cos(-angle), numpy.sin(-angle)
+        rotationMatrix = numpy.array([[cos, -sin], [sin, cos]])
 
-            if rotatedEnd[0] < 1e-10:
-                logger.error(
-                    "_PreparePoints: degenerate crack — end point x=%.6f after rotation. "
-                    "The crack may be a single point or have zero horizontal extent.",
-                    float(rotatedEnd[0]),
-                )
-                raise ValueError("Degenerate crack points: zero horizontal extent after rotation.")
+        # -------- 3. Applicazione della rotazione a tutti i punti -------
+        rotatedPoints = numpy.dot(traslatedPoints, rotationMatrix.T)
+    
+        # -------- 4. Forza y=0 all'inizio e alla fine -------
+        rotatedPoints[0, 1] = 0.0
+        rotatedPoints[-1, 1] = 0.0
+    
+        # -------- 5. Scala uniformemente -------
+        rotatedEnd = rotatedPoints[-1]
+
+        if rotatedEnd[0] < 1e-10:
+            logger.error(
+                "_PreparePoints: degenerate crack — end point x=%.6f after rotation. "
+                "The crack may be a single point or have zero horizontal extent.",
+                float(rotatedEnd[0]),
+            )
+            raise ValueError("Degenerate crack points: zero horizontal extent after rotation.")
 
 
-            i = 0
-            for point in rotatedPoints:
-                pointX = point[0]
-                pointY = point[1]
-                ratio = pointX / rotatedEnd[0]
-                if pointX != 0:
-                    point = [ratio, ratio * pointY / pointX]
-                
-                rotatedPoints[i] = point
-                i += 1
+        i = 0
+        for point in rotatedPoints:
+            pointX = point[0]
+            pointY = point[1]
+            ratio = pointX / rotatedEnd[0]
+            if pointX != 0:
+                point = [ratio, ratio * pointY / pointX]
             
-            result.append({
-                "crackID": crack["crackID"],
-                "points": rotatedPoints
-            })
+            rotatedPoints[i] = point
+            i += 1
 
-        return numpy.array(result)
+        return rotatedPoints
     
     @staticmethod
-    def _RotateCrackPoints180(preparedCrackPoints: numpy.ndarray) -> numpy.ndarray:
-        result = []
-        for crack in preparedCrackPoints:
-            if "points" not in crack:
-                continue
+    def _YReflectCrackPoints(preparedCrackPoints: numpy.ndarray) -> numpy.ndarray:
+        return preparedCrackPoints * numpy.array([1.0, -1.0])
 
-            points = crack["points"]
-            center = numpy.mean(points, axis=0)
-            rotationResult = numpy.empty((len(points), 2), dtype=float)
-            
-            for i, point in enumerate(points):
-                centredPoint = point - center
-                rotatedPoint = -centredPoint
-                rotationResult[i] = rotatedPoint + center
-            
-            result.append({
-                "crackID": crack["crackID"],
-                "points": rotationResult
-            })
-            
-        return numpy.array(result, dtype=object)
+        center = numpy.mean(preparedCrackPoints, axis=0)
+        points = preparedCrackPoints - center
+        points = points * numpy.array([1.0, -1.0])
+
+        return points + center
     
     @staticmethod
     def _DtwCostC(pointsA: numpy.ndarray, pointsB: numpy.ndarray) -> float:
@@ -232,15 +214,9 @@ class DtwService:
 
     @staticmethod
     def _Visualize(preparedCrackPoints: numpy.ndarray, rotatedCrackPoints: numpy.ndarray, bestMatch: dict):
-        if len(preparedCrackPoints) == 0 or len(rotatedCrackPoints) == 0:
-            return
-
-        firstCrackPoints = preparedCrackPoints[0]["points"]
-        firstRotatedPoints = rotatedCrackPoints[0]["points"]
-
         _, axes = pyplot.subplots(figsize=(8, 6))
-        axes.plot(firstCrackPoints[:, 0], firstCrackPoints[:, 1], label="Crack", color="black", linewidth=2)
-        axes.plot(firstRotatedPoints[:, 0], firstRotatedPoints[:, 1], label="Rotated crack (180°)", color="red", linewidth=2)
+        axes.plot(preparedCrackPoints[:, 0], preparedCrackPoints[:, 1], label="Crack", color="black", linewidth=2)
+        axes.plot(rotatedCrackPoints[:, 0], rotatedCrackPoints[:, 1], label="Reflected crack (y → -y)", color="red", linewidth=2)
         
         points = bestMatch["points"]
         axes.plot(points[:, 0], points[:, 1], label=f"{bestMatch['featureIndex']}_{bestMatch['sectionIndex']} ({bestMatch['cost']:.4f})")
