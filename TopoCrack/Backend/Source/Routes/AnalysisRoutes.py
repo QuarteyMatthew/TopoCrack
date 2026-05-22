@@ -13,12 +13,6 @@ Router = APIRouter()
 @Router.post("/analyze", response_model=AnalysisResponse)
 def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(...), startY: int = Form(...), endX: int = Form(...), endY: int = Form(...)):
     # ---------------- 1. Costruzione della request ----------------
-    logger.info(
-        "POST /analyze received: image='%s' (content-type=%s), "
-        "start=(%d,%d), end=(%d,%d).",
-        image.filename, image.content_type, startX, startY, endX, endY
-    )
-    
     try:
         imageBytes = image.file.read()
         analysisReq = AnalysisRequest(
@@ -27,16 +21,11 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
             UserEnd = Point(X=endX, Y=endY),
         )
         
-        logger.debug("AnalysisRequest built successfully: image size=%d bytes.", len(imageBytes))
-        
     except ValueError as e:
         logger.warning("Request validation failed: %s", e)
         raise HTTPException(status_code=422, detail=str(e))
     
     # ---------------- 2. Estrazione dei punti della crepa ----------------
-    print("============================= Stage 1: image processing =============================")
-    logger.info("Invoking ImageService.ExtractCrackPoints...")
-    
     coastalData = request.app.state.CoastalData
     
     try:
@@ -45,10 +34,9 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
             userStart  = analysisReq.UserStart,
             userEnd    = analysisReq.UserEnd,
         )
-        logger.info("ImageService returned %d crack points.", len(crackPoints))
         
     except ValueError as e:
-        logger.warning("ImageService failed: %s", e)
+        logger.warning("Failed to extract crack points: %s", e)
         raise HTTPException(status_code=422, detail=str(e))
     
     except Exception as e:
@@ -56,16 +44,9 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
         raise HTTPException(status_code=500, detail="Internal error during image processing.")
     
     # ---------------- 3. DTW e best match ----------------
-    print("============================= Stage 2: DTW end finding the best match =============================")
-    logger.info("Invoking DtwService.FindBestMatch...")
-    
     try:
         coastalData = numpy.array(request.app.state.CoastalData)
         bestMatch, curvatureRatio = DtwService.FindBestMatch(crackPoints, coastalData)
-        logger.info(
-            "DtwService returned best match: featureIndex=%s, sectionIndex=%s, cost=%.6f.",
-            bestMatch["featureIndex"], bestMatch["sectionIndex"], bestMatch["cost"]
-        )
 
     except Exception as e:
         logger.error("Unexpected error in DtwService: %s", e, exc_info=True)
@@ -91,11 +72,6 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
         Message    = "Analysis successfully completed",
         Warning    = warningMessage,  # None se la crepa è lineare
     )
-    
-    logger.info(
-        "Response ready: StartCoord=(%.4f, %.4f), EndCoord=(%.4f, %.4f), DtwScore=%.6f.",
-        startCoord[0], startCoord[1], endCoord[0], endCoord[1], bestMatch["cost"]
-    )
-    
+
     return response
     

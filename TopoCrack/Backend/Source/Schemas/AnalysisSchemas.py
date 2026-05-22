@@ -1,5 +1,4 @@
 from pydantic import BaseModel, field_validator
-import numpy as np
 
 class Point(BaseModel):
     X: int

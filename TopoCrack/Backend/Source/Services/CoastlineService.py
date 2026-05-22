@@ -1,12 +1,8 @@
 import pickle
-import time
 import numpy
-import logging
 from pathlib import Path
 
 from ._CoastlineProcessing import DownloadCoastline, BuildSlidingWindowDataset
-
-logger = logging.getLogger(__name__)
 
 class CoastlineService:
     
@@ -22,24 +18,12 @@ class CoastlineService:
         # ---- 1. Controlla che il pickle file esista nella cache ----
         # Il file esiste: viene caricato dalla cache
         if CoastlineService._PicklePath.exists():
-            fileSizeMb = CoastlineService._PicklePath.stat().st_size / 1_000_000
-            logger.info("Pickle cache found at '%s' (%.1f MB). Loading...", CoastlineService._PicklePath, fileSizeMb)
-            
             with open(CoastlineService._PicklePath, "rb") as f:
                 data = pickle.load(f)
-            
-            logger.info("Coastal data loaded from cache: %d sections.", len(data))
-            
             return data
 
-        logger.info("Pickle not found. Starting full build pipeline...")
-
-        logger.info("Step 1/2 — Downloading coastline data (resolution=10m)...")
         coastlines = DownloadCoastline(resolution="10m", cacheDir=CoastlineService._CachePath)
-        logger.info("Step 1/2 complete: %d coastline features loaded.", len(coastlines))
 
-        logger.info("Step 2/2 — Building multi-scale sliding window dataset...")
-        
         # Ogni build cattura la stessa coastline a scale geografiche diverse.
         # pointSpacingKm × windowSize = lunghezza fisica della finestra:
         #   Build 1:   5km × 50  =   250km per finestra
@@ -63,9 +47,8 @@ class CoastlineService:
         ]
 
         allWindows = []
-        for index, config in enumerate(buildConfigs, start=1):
+        for config in buildConfigs:
             pSpacingKm = config["pointSpacingKm"]
-            startTime = time.perf_counter()
             windows = BuildSlidingWindowDataset(
                 coastlines=coastlines,
                 pointSpacingKm=pSpacingKm,
@@ -73,25 +56,12 @@ class CoastlineService:
                 stride=stride,
                 nNormalizedPoints=nPoints,  # sempre 50, per tutti i build
             )
-            elapsed = time.perf_counter() - startTime
-
-            logger.info(
-                "Build %d/%d: spacing=%.0fkm, window=%.0fkm → %d windows in %.2fs.",
-                index, len(buildConfigs), pSpacingKm, pSpacingKm * wSize, len(windows), elapsed
-            )
-
             allWindows.extend(windows)
         
         normalized = numpy.array(allWindows)
-        logger.info("Step 2/2 complete: %d total windows.", len(normalized))
 
         CoastlineService._PicklePath.parent.mkdir(parents=True, exist_ok=True)
         with open(CoastlineService._PicklePath, "wb") as f:
             pickle.dump(normalized, f)
 
-        savedSizeMb = CoastlineService._PicklePath.stat().st_size / 1_000_000
-        logger.info("Pickle saved (%.1f MB).", savedSizeMb)
-
         return normalized
-    
-# CoastlineService.LoadOrBuild()

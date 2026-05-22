@@ -1,6 +1,5 @@
 import geopandas
 import numpy
-import logging
 import requests, zipfile, io
 
 from pyproj import CRS, Geod, Transformer
@@ -9,8 +8,6 @@ from matplotlib import pyplot as plt
 from geopandas import GeoDataFrame
 from shapely.ops import linemerge
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 # Inizializzazione del calcolatore geodetico con l'elissoide WGS84
 geodCalc = Geod(ellps="WGS84")
@@ -24,53 +21,33 @@ def DownloadCoastline(resolution: str = "50m", cacheDir: str = "../Cache") -> Ge
     
     if not (coastlinePath.exists() and dotShapePath.exists() and dotShapeXPath.exists()):
         if not cachePath.exists():
-            logger.debug("Cache directory not found, creating it at '%s'...", cachePath)
             cachePath.mkdir(parents=True, exist_ok=True)
         
-        logger.info("Coastal data not found in cache. Starting download (resolution=%s)...", resolution)
         downloadURL = f"https://naturalearth.s3.amazonaws.com/{resolution}_physical/{coastlineDir}.zip"
-        logger.debug("Download URL: %s", downloadURL)
-        
         req = requests.get(downloadURL)
         req.raise_for_status()
-        logger.info("Download complete (%.1f MB). Extracting archive...", len(req.content) / 1_000_000)
         
         with zipfile.ZipFile(io.BytesIO(req.content)) as zipFile:
             zipFile.extractall(coastlinePath)
             
         # Rimozione dei file non necessari: logghiamo quanti ne eliminiamo
         # così è facile accorgersi se il formato del pacchetto cambia in futuro.
-        removedCount = 0
         suffices = [".cpg", ".dbf", ".prj", ".html", ".txt"]
         for neFile in coastlinePath.iterdir():
             if not neFile.is_file():
                 continue
             if neFile.suffix.lower() in suffices:
                 neFile.unlink()
-                removedCount += 1
-        logger.debug("Removed %d unnecessary files from the archive.", removedCount)
     else:
         # I file sono già stati scaricati
-        logger.info("Coastal data found in cache, skipping download.")
+        pass
     
     shapeFile = next(coastlinePath.glob("*.shp"))
-    logger.debug("Reading shapefile: '%s'", shapeFile)
-    coastlines = geopandas.read_file(shapeFile)
-    logger.info("Shapefile loaded: %d coastline features.", len(coastlines))
     
     return geopandas.read_file(shapeFile)
 
 def BuildSlidingWindowDataset(coastlines: GeoDataFrame, pointSpacingKm: float, windowSize: int, stride: int, nNormalizedPoints: int) -> numpy.ndarray:
     pointSpacingM = pointSpacingKm * 1000
-    
-    logger.info(
-        "Building sliding window dataset: pointSpacing=%.1fkm, windowSize=%d, "
-        "stride=%d → window covers %.0fkm, new window every %.0fkm.",
-        pointSpacingKm, windowSize, stride,
-        windowSize * pointSpacingKm,
-        stride * pointSpacingKm,
-    )
-    
     windows = []
     totalPoints = 0
     
@@ -78,14 +55,9 @@ def BuildSlidingWindowDataset(coastlines: GeoDataFrame, pointSpacingKm: float, w
         coastlinePoints = ResampleCoastlineToPoints(row.geometry, pointSpacingM)
         
         if len(coastlinePoints) < windowSize:
-            logger.debug(
-                "Feature %d: too short after resampling (%d points < windowSize %d). Skipping.",
-                featIndex, len(coastlinePoints), windowSize,
-            )
             continue
         
         totalPoints += len(coastlinePoints)
-        logger.debug("Feature %d: %d points after resampling.", featIndex, len(coastlinePoints))
         
         GenWindows = GenerateSlidingWindows(
             featureIndex=featIndex,
@@ -96,15 +68,6 @@ def BuildSlidingWindowDataset(coastlines: GeoDataFrame, pointSpacingKm: float, w
         )
         windows.extend(GenWindows)
         
-    validCount = sum(1 for w in windows if w["points"] is not None)
-    logger.info(
-        "Dataset built: %d total windows from %d coastline features "
-        "(%d valid, %d degenerate). Total resampled points: %d.",
-        len(windows), len(coastlines),
-        validCount, len(windows) - validCount,
-        totalPoints,
-    )
-
     return numpy.array(windows)
 
 def ResampleCoastlineToPoints(coastline: LineString, pointSpacingM: float) -> numpy.ndarray:
@@ -145,46 +108,26 @@ def GenerateSlidingWindows(featureIndex: int, coastlinePoints: numpy.ndarray, wi
     nTotal = len(coastlinePoints)
     
     if nTotal < windowSize:
-        logger.debug(
-            "Feature %d: only %d points available, need at least %d for one window. Skipping.",
-            featureIndex, nTotal, windowSize,
-        )
         return windows
     
-    nWindows = 0
-    nSkipped = 0
     for start in range(0, nTotal - windowSize + 1, stride):
         end = start + windowSize
         windowCoords = coastlinePoints[start:end]
         
         line = LineString(windowCoords.tolist())
         
-        try:
-            normalizedPoints = WindowToNormalizedPoints(line, nNormalizedPoints)
-            windows.append({
-                "featureIndex": featureIndex,
-                # windowStart o sectionIndex è l'indice del primo punto nella sequenza ricampionata,
-                # utile per il debug ma non necessario per il DTW.
-                "sectionIndex" : start,
-                # Le coordinate geografiche degli estremi sono quello che
-                # restituiamo al frontend come risultato finale.
-                "startCoord"  : tuple(windowCoords[0]),   # (lon, lat)
-                "endCoord"    : tuple(windowCoords[-1]),   # (lon, lat)
-                "points"      : normalizedPoints,
-            })
-            nWindows += 1
-            
-        except ValueError as e:
-            nSkipped += 1
-            logger.debug(
-                "Feature %d, window [%d:%d] skipped: %s",
-                featureIndex, start, end, e,
-            )
-        
-    logger.debug(
-        "Feature %d: %d windows generated, %d skipped (degenerate).",
-        featureIndex, nWindows, nSkipped,
-    )
+        normalizedPoints = WindowToNormalizedPoints(line, nNormalizedPoints)
+        windows.append({
+            "featureIndex": featureIndex,
+            # windowIndex è l'indice del primo punto nella sequenza ricampionata,
+            # utile per il debug ma non necessario per il DTW.
+            "windowIndex" : start,
+            # Le coordinate geografiche degli estremi sono quello che
+            # restituiamo al frontend come risultato finale.
+            "startCoord"  : tuple(windowCoords[0]),   # (lon, lat)
+            "endCoord"    : tuple(windowCoords[-1]),   # (lon, lat)
+            "points"      : normalizedPoints,
+        })
 
     return numpy.array(windows)
 
@@ -203,7 +146,6 @@ def InterpolateGeodetic(coastlineCoords: list, midDistance: float) -> tuple:
         if accumulatedDist + segmentLength >= midDistance:
             # Calcola quanto lontano deve andare questo segmento
             ramaining = midDistance - accumulatedDist
-            
             # Trova l'esatto punto a quella distanza
             newLon, newLat, _ = geodCalc.fwd(lon1, lat1, azimuth, ramaining)
             
@@ -260,11 +202,11 @@ def GetUtmCrsFormGivenLongitude(longitude: float) -> CRS:
     # Codice EPSG: 32600 + zona per l'emisfero settentrionale (32700 + zona per quello meridionale)
     return CRS.from_epsg(32600 + zone)
 
-def ColorForSection(featureIndex, sectionIndex, cmap: str = "hsv"):
+def ColorForSection(featureIndex, windowIndex, cmap: str = "hsv"):
     # Mix two indices using XOR and multiplication by large primes
     # This ensures nearby indices map to very different hash values
     # 2654435761 and 2246822519 are large primes commonly used in hashing
-    h = (featureIndex * 2654435761 ^ sectionIndex * 2246822519) & 0xFFFFFFFF
+    h = (featureIndex * 2654435761 ^ windowIndex * 2246822519) & 0xFFFFFFFF
     
     # Convert 32-bit hash to [0, 1] range for colormap
     value = h / 0xFFFFFFFF
@@ -273,7 +215,7 @@ def ColorForSection(featureIndex, sectionIndex, cmap: str = "hsv"):
 
 def VisualizeCoastline(coastlines: GeoDataFrame, normalized: list):
     # Step 3: Generate deterministic colors for each section
-    colors = [ColorForSection(item['featureIndex'], item['sectionIndex']) for item in normalized]
+    colors = [ColorForSection(item['featureIndex'], item['windowIndex']) for item in normalized]
 
     _, axes = plt.subplots(1, 2, figsize=(16, 6))
 
@@ -328,3 +270,4 @@ def VisualizeCoastline(coastlines: GeoDataFrame, normalized: list):
 
     plt.tight_layout()
     plt.show()
+    
