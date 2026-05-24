@@ -26,8 +26,6 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
         raise HTTPException(status_code=422, detail=str(e))
     
     # ---------------- 2. Estrazione dei punti della crepa ----------------
-    coastalData = request.app.state.CoastalData
-    
     try:
         crackPoints = ImageService.ExtractCrackPoints(
             imageBytes = analysisReq.ImageBytes,
@@ -45,7 +43,7 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
     
     # ---------------- 3. DTW e best match ----------------
     try:
-        coastalData = numpy.array(request.app.state.CoastalData)
+        coastalData = request.app.state.CoastalData
         bestMatch, curvatureRatio = DtwService.FindBestMatch(crackPoints, coastalData)
 
     except Exception as e:

@@ -1,5 +1,4 @@
 import math
-import time
 import numpy
 import logging
 import matplotlib.pyplot as pyplot
@@ -42,6 +41,7 @@ _lib.DtwCost2D.restype = ctypes.c_double
 _lib.DtwCost2D.argtypes = [
     ctypes.POINTER(ctypes.c_double), ctypes.c_int,
     ctypes.POINTER(ctypes.c_double), ctypes.c_int,
+    ctypes.c_double,
 ]
 
 class DtwService:
@@ -50,8 +50,8 @@ class DtwService:
     def FindBestMatch(crackPoints: numpy.ndarray, coastalData: numpy.ndarray) -> tuple[dict, float]:
         # ------------- 1. Preparazione dei punti -------------
         # Prepara la crepa e la sua versione riflessa sull'asse x.
-        preparedCrackPoints = DtwService._PreparePoints(crackPoints)
-        rotatedCrackPoints = DtwService._RotateCrackPoints(preparedCrackPoints)
+        preparedCrackPoints  = DtwService._PreparePoints(crackPoints)
+        mirAndRevCrackPoints = DtwService._MirrorAndReverseCrackPoints(preparedCrackPoints)
         
         # Aggiungiamo il controllo di curvatura: un rapporto percorso/corda > 3
         # indica una crepa che si arrotola su se stessa e probabilmente non
@@ -76,15 +76,15 @@ class DtwService:
         bestMatch = None
         
         for window in validWindows:
-            normalCost  = DtwService._DtwCostC(preparedCrackPoints, window["points"])
-            rotatedCost = DtwService._DtwCostC(rotatedCrackPoints,  window["points"])
+            normalCost  = DtwService._DtwCostC(preparedCrackPoints, window["points"], bestCost)
+            rotatedCost = DtwService._DtwCostC(mirAndRevCrackPoints, window["points"], min(bestCost, normalCost))
             cost        = min(normalCost, rotatedCost)
             
             if cost < bestCost:
-                bestCost = cost
+                bestCost  = cost
                 bestMatch = { **window, "cost": cost }
-
-        DtwService._Visualize(preparedCrackPoints, rotatedCrackPoints, bestMatch)
+        
+        DtwService._Visualize(preparedCrackPoints, mirAndRevCrackPoints, bestMatch)
 
         return bestMatch, curvatureRatio
     
@@ -116,7 +116,7 @@ class DtwService:
         for point in rotatedPoints:
             pointX = point[0]
             pointY = point[1]
-            ratio = pointX / rotatedEnd[0]
+            ratio  = pointX / rotatedEnd[0]
             if pointX != 0:
                 point = [ratio, ratio * pointY / pointX]
             
@@ -124,26 +124,30 @@ class DtwService:
             i += 1
 
         return rotatedPoints
-    
-    # TODO: sistema questa funzione che non funziona bene.
-    # Aggiunge un offset alla crepa routata rispetto alla crepa originale
+
     @staticmethod
-    def _RotateCrackPoints(preparedCrackPoints: numpy.ndarray) -> numpy.ndarray:
+    def _MirrorAndReverseCrackPoints(preparedCrackPoints: numpy.ndarray) -> numpy.ndarray:
         nPoints = len(preparedCrackPoints)
         result  = numpy.empty((nPoints, 2))
-        xCenter  = numpy.mean(preparedCrackPoints, axis=0)[0]
+        
+        # Il valore xf è la coordinata X dell'ultimo punto dell'array originale
+        xf = preparedCrackPoints[nPoints - 1][0]
         
         for i, point in enumerate(preparedCrackPoints):
-            centredPoint = numpy.array([point[0] - xCenter, point[1]])
-            rotatedPoint = centredPoint * -1
-            rotatedPoint = numpy.array([rotatedPoint[0] + xCenter, rotatedPoint[1]])
-            result[i]    = rotatedPoint
+            # 1. Calcola la nuova X traslata rispetto a xf
+            newX = xf - point[0]
+            
+            # 2. Specchia la Y cambiando il segno
+            newY = point[1] * -1.0
+            
+            # 3. Inverte l'ordine di inserimento: 
+            # il primo punto originale (i = 0) va in fondo al nuovo array (nPoints - 1)
+            result[nPoints - 1 - i] = numpy.array([newX, newY])
         
         return result
 
-    
     @staticmethod
-    def _DtwCostC(pointsA: numpy.ndarray, pointsB: numpy.ndarray) -> float:
+    def _DtwCostC(pointsA: numpy.ndarray, pointsB: numpy.ndarray, bestCost: float) -> float:
         # numpy.ascontiguousarray garantisce che l'array sia in memoria contigua
         # (row-major, C-style): indispensabile per passarlo a C senza copie extra
         a = numpy.ascontiguousarray(pointsA, dtype=numpy.float64)
@@ -152,10 +156,11 @@ class DtwService:
         # Ottiene un puntatore grezzo all'inizio dell'array numpy senza copiare i dati
         pointerA = a.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         pointerB = b.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        doubleBC = ctypes.c_double(bestCost)
         
         # Chiamata alla funzione C. Tramite CDLL il GIL viene rilasciato
         # automaticamente 
-        return _lib.DtwCost2D(pointerA, len(a), pointerB, len(b))
+        return _lib.DtwCost2D(pointerA, len(a), pointerB, len(b), doubleBC)
     
     @staticmethod
     def _DtwCostPython(pointsA: numpy.ndarray, pointsB: numpy.ndarray) -> float:

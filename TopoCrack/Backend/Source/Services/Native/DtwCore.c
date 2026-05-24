@@ -18,7 +18,7 @@
  * 
  * @return costo finale del DTW
  */
-EXPORT double DtwCost2D(const double* pointsA, int countA, const double* pointsB, int countB)
+EXPORT double DtwCost2D(const double* pointsA, int countA, const double* pointsB, int countB, double bestCost)
 {
     // Alloca la matrice lineare dei cost
     double* costMatrix = (double*)malloc((countA + 1) * (countB + 1) * sizeof(double));
@@ -37,6 +37,8 @@ EXPORT double DtwCost2D(const double* pointsA, int countA, const double* pointsB
     // Algoritmo di DTW
     for (int i = 1; i <= countA; i++)
     {
+        double rowMin = INFINITY;
+
         for (int j = 1; j <= countB; j++)
         {
             double deltaX = pointsA[(i - 1) * 2]     - pointsB[(j - 1) * 2];
@@ -47,10 +49,23 @@ EXPORT double DtwCost2D(const double* pointsA, int countA, const double* pointsB
             double deletion  = costMatrix[i       * (countB + 1) + (j - 1)];
             double match     = costMatrix[(i - 1) * (countB + 1) + (j - 1)];
 
-            double min = insertion < deletion ? insertion : deletion;
-            min = min < match ? min : match;
+            double minPrev = insertion < deletion ? insertion : deletion;
+            minPrev = minPrev < match ? minPrev : match;
 
-            costMatrix[i * (countB + 1) + j] = distance + min;
+            double cell = distance + minPrev;
+            costMatrix[i * (countB + 1) + j] = cell;
+
+            if (cell < rowMin)
+                rowMin = cell;
+        }
+
+        // Early return valido: rowMin è un lower bound del costo finale.
+        // Se anche il valore più basso della riga supera bestCost,
+        // nessun percorso che attraversa questa riga può migliorare bestCost.
+        if (rowMin >= bestCost)
+        {
+            free(costMatrix);
+            return rowMin;
         }
     }
 
