@@ -1,5 +1,5 @@
 import logging
-import numpy
+import time
 from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException
 
 from Schemas.AnalysisSchemas import AnalysisRequest, AnalysisResponse, Point, GeographicCoords 
@@ -12,6 +12,8 @@ Router = APIRouter()
 
 @Router.post("/analyze", response_model=AnalysisResponse)
 def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(...), startY: int = Form(...), endX: int = Form(...), endY: int = Form(...)):
+    startTime = time.perf_counter()
+
     # ---------------- 1. Costruzione della request ----------------
     try:
         imageBytes = image.file.read()
@@ -51,11 +53,11 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
         raise HTTPException(status_code=500, detail="Internal error during DTW computation.")
     
     warningMessage = None
-    if curvatureRatio > 1.5:
+    if curvatureRatio > DtwService.CurvatureRatioThreshold:
         warningMessage = (
-            "The selected crack traces an outline rather than a linear path. "
-            "For best results, select only one side of the shape — "
-            "the algorithm compares linear coastal profiles."
+            "La crepa selezionata traccia quello che sembra essere un contorno, "
+            "piuttosto che una linea perlopiù dritta. "
+            "I risultati potrebbero non essere ottimali."
         )
 
     # ---------- 4. Costruzione e restituzione della risposta ----------
@@ -67,9 +69,12 @@ def Analyze(request: Request, image: UploadFile = File(...), startX: int = Form(
         EndCoord   = GeographicCoords(Lon=endCoord[0], Lat=endCoord[1]),
         DtwScore   = bestMatch["cost"],
         StatusCode = 200,
-        Message    = "Analysis successfully completed",
+        Message    = "Analisi completata con successo",
         Warning    = warningMessage,  # None se la crepa è lineare
     )
+
+    elapsedTime = time.perf_counter() - startTime
+    logger.info("Crack's analysis took %.6f", elapsedTime)
 
     return response
     

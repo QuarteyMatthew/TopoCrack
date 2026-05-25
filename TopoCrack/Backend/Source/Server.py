@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from Routes.AnalysisRoutes import Router as AnalysisRouter
 from Services.CoastlineService import CoastlineService
 
-logging.basicConfig(level=logging.WARNING, format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", datefmt="%H:%M:%S")
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager

@@ -1,4 +1,5 @@
 import math
+import time
 import numpy
 import logging
 import matplotlib.pyplot as pyplot
@@ -46,6 +47,8 @@ _lib.DtwCost2D.argtypes = [
 
 class DtwService:
 
+    CurvatureRatioThreshold = 3.0
+
     @staticmethod
     def FindBestMatch(crackPoints: numpy.ndarray, coastalData: numpy.ndarray) -> tuple[dict, float]:
         # ------------- 1. Preparazione dei punti -------------
@@ -53,18 +56,18 @@ class DtwService:
         preparedCrackPoints  = DtwService._PreparePoints(crackPoints)
         mirAndRevCrackPoints = DtwService._MirrorAndReverseCrackPoints(preparedCrackPoints)
         
-        # Aggiungiamo il controllo di curvatura: un rapporto percorso/corda > 3
+        # Controllo di curvatura: un rapporto percorso/corda > 3
         # indica una crepa che si arrotola su se stessa e probabilmente non
         # troverà mai un buon match in nessuna coastline reale.
         pathLength     = float(numpy.sum(numpy.linalg.norm(numpy.diff(preparedCrackPoints, axis=0), axis=1)))
         chordLength    = float(preparedCrackPoints[-1, 0])  # = 1.0 dopo la scala
         curvatureRatio = pathLength / max(chordLength, 1e-10)
-        if curvatureRatio > 3.0:
+        if curvatureRatio > DtwService.CurvatureRatioThreshold:
             logger.warning(
-                "High curvature ratio (%.2f): the crack path is %.1fx longer than "
-                "its chord. The DTW match may be unreliable — no coastline has "
-                "this degree of self-folding. Consider re-selecting the crack endpoints.",
-                curvatureRatio, curvatureRatio,
+                "High curvature ratio between the selected crack and the coastline found (%.4f) "
+                "DTW match may be unreliable. " 
+                "Consider re-selecting the crack endpoints.",
+                curvatureRatio
             )
 
         validWindows = [w for w in coastalData if w["points"] is not None]
@@ -75,6 +78,7 @@ class DtwService:
         bestCost = numpy.inf
         bestMatch = None
         
+        startTime = time.perf_counter()
         for window in validWindows:
             normalCost  = DtwService._DtwCostC(preparedCrackPoints, window["points"], bestCost)
             rotatedCost = DtwService._DtwCostC(mirAndRevCrackPoints, window["points"], min(bestCost, normalCost))
@@ -83,8 +87,10 @@ class DtwService:
             if cost < bestCost:
                 bestCost  = cost
                 bestMatch = { **window, "cost": cost }
-        
-        DtwService._Visualize(preparedCrackPoints, mirAndRevCrackPoints, bestMatch)
+        elapsedTime = time.perf_counter() - startTime
+        logger.info("Slinding window DTW took %.6f", elapsedTime)
+
+        # DtwService._Visualize(preparedCrackPoints, mirAndRevCrackPoints, bestMatch)
 
         return bestMatch, curvatureRatio
     
