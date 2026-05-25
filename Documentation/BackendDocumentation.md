@@ -1,6 +1,6 @@
 # TopoCrack — Documentazione Backend
 
-> _"Ogni crepa racconta una storia geologica. TopoCrack la confronta con le coste del mondo per capire dove si è formata."_
+> "Ogni cosa che puoi immaginare, la natura l’ha già creata." (Albert Einstein)
 
 ---
 
@@ -330,7 +330,3 @@ python Source/RunLocal.py
 ```
 
 Il server sarà disponibile su `http://localhost:8000`. La documentazione interattiva dell'API è accessibile su `http://localhost:8000/docs` (Swagger UI generata automaticamente da FastAPI).
-
----
-
-_Documentazione generata con il ❤️ per il progetto TopoCrack._
