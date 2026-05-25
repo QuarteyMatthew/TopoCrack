@@ -33,15 +33,6 @@ topocrack/
 
 L'utente arriva sulla home con lo sfondo paesaggistico e i controlli in stile glassmorphism. Può premere il tasto camera per scattare una foto o il tasto galleria per sceglierne una. Nella schermata editor tocca prima il punto di inizio della crepa (indicatore verde A) e poi il punto di fine (indicatore rosso B). Appare il bottone Analizza Crepa che invierà i dati al server. La schermata risultato mostra l'anteprima con la linea disegnata, il nome della costa e il pulsante per aprire Maps.
 
-## Cosa Devi Implementare
-
-Nei file trovi commenti `// qui devo fare...` che segnalano esattamente i punti da completare.
-
-In `crack_editor_screen.dart` nel metodo `_confirmAndSend` devi fare la chiamata HTTP multipart al tuo server inviando l'immagine e le coordinate relative (valori tra 0.0 e 1.0) dei due punti. Il server dovrà restituire latitudine, longitudine e nome della costa corrispondente.
-
-In `result_screen.dart` devi sostituire i dati fittizi con quelli reali restituiti dal server e, se vuoi mostrare la mappa inline invece di aprire Maps esternamente, integrare `google_maps_flutter` aggiungendo la API key in `AndroidManifest.xml` e in `AppDelegate.swift` su iOS.
-
-In `home_screen.dart` puoi aggiungere la logica per visualizzare le sessioni salvate quando si preme il segnalibro, e implementare la rimozione della sessione corrente sul pulsante minus.
 
 ## API Keys
 
@@ -74,11 +65,3 @@ Parsing Risposta: Una volta ricevuta la risposta JSON, estraggo lat_start, lon_s
 4.
 Sicurezza: Ho aggiunto un blocco try-catch per gestire eventuali errori di rete o del server, mostrando un messaggio all'utente se qualcosa va storto.
 
-## ERRORI:
-
-L'errore Incorrect use of ParentDataWidget in Flutter accade quasi sempre quando un widget Positioned non è un figlio diretto di uno Stack.
-Nel tuo codice, la funzione _buildDot restituisce un LayoutBuilder che al suo interno contiene un Positioned. Questo rompe la gerarchia di Flutter.
-
-Il problema nasce dal fatto che le coordinate (0.0 - 1.0) sono calcolate rispetto all'intera area dello schermo e non rispetto alla sola immagine. Poiché la schermata dei risultati ha proporzioni diverse (la card in basso è più grande), l'immagine viene centrata diversamente, "spostando" i punti.
-Per risolvere questo problema in modo definitivo, dobbiamo assicurarci che i punti siano disegnati esattamente sopra l'immagine, indipendentemente dallo spazio nero attorno.
-Come ho risolto: In entrambe le schermate ho aggiunto un calcolo automatico del rapporto d'aspetto (proporzioni) della foto. Adesso, sia l'editor che i risultati usano un widget AspectRatio che avvolge esattamente l'immagine. In questo modo, la coordinata 0.5, 0.5 corrisponderà sempre al centro preciso della foto, indipendentemente dalla dimensione dello schermo.

@@ -118,7 +118,7 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
       final endX = (_endPoint!.position.dx * width).round();
       final endY = (_endPoint!.position.dy * height).round();
 
-      final uri = Uri.parse('http://172.18.5.13:8000/api/analyze');
+      final uri = Uri.parse('http://172.16.7.216:8000/api/analyze');
       final request = http.MultipartRequest('POST', uri);
 
       request.files.add(await http.MultipartFile.fromPath('image', widget.imageFile.path));

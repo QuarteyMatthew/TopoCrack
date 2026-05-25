@@ -53,9 +53,14 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 
-  /// Apre Google Maps con le coordinate ricevute dal server
+  /// Apre Google Maps centrato sul baricentro della crepa
   Future<void> _openMaps(BuildContext context) async {
-    final String urlString = 'https://www.google.com/maps/dir/?api=1&origin=${widget.startLatitude},${widget.startLongitude}&destination=${widget.endLatitude},${widget.endLongitude}&travelmode=driving';
+    final latitude = (widget.startLatitude + widget.endLatitude) / 2;
+    final longitude = (widget.startLongitude + widget.endLongitude) / 2;
+
+    // URL per visualizzare il punto con un pin, senza navigazione
+    final String urlString = 'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude';
+
     final uri = Uri.parse(urlString);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
