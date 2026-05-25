@@ -55,13 +55,4 @@ Il tema chiaro e scuro è gestito da `_TopoCrackAppState` in `main.dart`. Lo sta
 
 
 
-27/04/2026
-1.
-Integrazione Multipart: Ora la funzione _confirmAndSend crea una richiesta http.MultipartRequest, aggiunge l'immagine come file e le coordinate (x1, y1, x2, y2) come campi del form.
-2.
-Gestione Caricamento: Ho aggiunto uno stato _isLoading. Quando premi "OK", il bottone mostra una piccola rotella di caricamento (CircularProgressIndicator) e impedisce click multipli.
-3.
-Parsing Risposta: Una volta ricevuta la risposta JSON, estraggo lat_start, lon_start e coast_name per passarli alla schermata dei risultati.
-4.
-Sicurezza: Ho aggiunto un blocco try-catch per gestire eventuali errori di rete o del server, mostrando un messaggio all'utente se qualcosa va storto.
 
