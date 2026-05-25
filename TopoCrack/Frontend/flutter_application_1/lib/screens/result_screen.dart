@@ -12,6 +12,7 @@ class ResultScreen extends StatefulWidget {
   final double endLatitude;
   final double endLongitude;
   final String coastName;
+  final String warning;
 
   const ResultScreen({
     super.key,
@@ -23,6 +24,7 @@ class ResultScreen extends StatefulWidget {
     required this.endLatitude,
     required this.endLongitude,
     required this.coastName,
+    required this.warning,
   });
 
   @override
@@ -222,10 +224,19 @@ class _ResultScreenState extends State<ResultScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
+                          Text(
+                            'Warning: ${widget.warning}',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
 
                           // ─ Coordinate ─
                           Text(
-                            'INIZIO: ${widget.startLatitude.toStringAsFixed(4)}°N  ${widget.startLongitude.toStringAsFixed(4)}°E',
+                            'Inizio: ${widget.startLatitude.toStringAsFixed(4)}°N  ${widget.startLongitude.toStringAsFixed(4)}°E',
                             style: TextStyle(
                               fontSize: 13,
                               color: isDark ? Colors.white54 : Colors.black45,
@@ -233,7 +244,7 @@ class _ResultScreenState extends State<ResultScreen> {
                             ),
                           ),
                           Text(
-                            'FINE: ${widget.endLatitude.toStringAsFixed(4)}°N  ${widget.endLongitude.toStringAsFixed(4)}°E',
+                            'Fine: ${widget.endLatitude.toStringAsFixed(4)}°N  ${widget.endLongitude.toStringAsFixed(4)}°E',
                             style: TextStyle(
                               fontSize: 13,
                               color: isDark ? Colors.white54 : Colors.black45,

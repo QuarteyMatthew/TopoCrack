@@ -1,0 +1,41 @@
+# General
+.DS_Store
+.idea/
+*.log
+
+# Python artifacts
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+**/.Python
+**/env/
+**/venv/
+**/.venv/
+**/.mypy_cache/
+**/.pytest_cache/
+**/.coverage
+
+# Backend repository-specific
+TopoCrack/Backend/.venv/
+TopoCrack/Backend/Source/Cache/
+TopoCrack/Backend/Source/Services/Native/Build/
+TopoCrack/Backend/Source/**/__pycache__/
+TopoCrack/Backend/Source/Cache/NormalizedSections.pkl
+TopoCrack/Backend/Source/Cache/NeturalEarthData/ne_10m_coastline/
+
+# Flutter generated files
+TopoCrack/Frontend/flutter/
+TopoCrack/Frontend/flutter_application_1/.dart_tool/
+TopoCrack/Frontend/flutter_application_1/build/
+TopoCrack/Frontend/flutter_application_1/.flutter-plugins
+TopoCrack/Frontend/flutter_application_1/.flutter-plugins-dependencies
+TopoCrack/Frontend/flutter_application_1/.packages
+TopoCrack/Frontend/flutter_application_1/ios/Pods/
+TopoCrack/Frontend/flutter_application_1/ios/Runner.xcworkspace/
+TopoCrack/Frontend/flutter_application_1/android/.gradle/
+TopoCrack/Frontend/flutter_application_1/android/app/build/
+TopoCrack/Frontend/flutter_application_1/android/build/
+TopoCrack/Frontend/flutter_application_1/windows/.dart_tool/
+TopoCrack/Frontend/flutter_application_1/macos/Pods/
+TopoCrack/Frontend/flutter_application_1/macos/Runner.xcworkspace/

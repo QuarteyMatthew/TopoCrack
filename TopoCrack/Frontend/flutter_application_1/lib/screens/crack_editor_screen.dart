@@ -147,7 +147,8 @@ class _CrackEditorScreenState extends State<CrackEditorScreen>
                 startLongitude: (startCoord['Lon'] as num?)?.toDouble() ?? 0.0,
                 endLatitude: (endCoord['Lat'] as num?)?.toDouble() ?? 0.0,
                 endLongitude: (endCoord['Lon'] as num?)?.toDouble() ?? 0.0,
-                coastName: body['Message'] ?? 'Analisi completata',
+                coastName: body['Message'],
+                warning: body['Warning'] ?? 'Nessuno',
               ),
             ),
           );

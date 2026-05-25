@@ -6,21 +6,17 @@ Eseguire con:
     python RunLocal.py
 """
 
-import logging
-
 from pathlib import Path
 from Services.CoastlineService import CoastlineService
 from Services.ImageService import ImageService
 from Services.DtwService import DtwService
 from Schemas.AnalysisSchemas import Point
 
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s", datefmt="%H:%M:%S")
-
 # --------------- 1. Carica (o rigenera) i dati costieri ---------------
 # Questa è esattamente la stessa chiamata che fa il lifespan del server.
 print("========= Phase 1: Loading of caostal data =========")
-coastalData = CoastlineService.LoadOrBuild()
-print(f"Loaded sections: {len(coastalData)}\n")
+coastalData = CoastlineService.LoadCoastalData()
+print(f"Loaded windows: {len(coastalData)}\n")
 
 # --------------- 2. Carica l'immagine di test ---------------
 # Leggiamo i byte dal disco — identico a come arrivano via HTTP.
@@ -41,7 +37,7 @@ bestMatch = DtwService.FindBestMatch(crackPoints, coastalData)
 
 print("\n========= Risultato =========")
 print(f"Feature index : {bestMatch["featureIndex"]}")
-print(f"Section index : {bestMatch["sectionIndex"]}")
+print(f"Window index  : {bestMatch["windowIndex"]}")
 print(f"DTW score     : {bestMatch["cost"]:.6f}")
 print(f"Start coord   : {bestMatch["startCoord"]}")
 print(f"End coord     : {bestMatch["endCoord"]}")

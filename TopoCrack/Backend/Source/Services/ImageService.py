@@ -12,15 +12,15 @@ logger = logging.getLogger(__name__)
 class ImageService:
     
     # Parametri della pipeline
-    _MaxDisplayLength:                int   = 600
-    _ClaheClipLimit:                  int   = 3
-    _BilateralDiameter:               int   = 7
-    _BilateralSigmaColor:             int   = 100
-    _BilateralSigmaSpace:             int   = 120
-    _DarkestPixelPercentageBilateral: int   = 25
-    _DarkestPixelPercentageCanny:     int   = 5
-    _MorphAnchor:                     int   = 3
-    _SamplesNumber:                   int   = 50
+    _MaxDisplayLength:                int = 600
+    _ClaheClipLimit:                  int = 3
+    _BilateralDiameter:               int = 7
+    _BilateralSigmaColor:             int = 100
+    _BilateralSigmaSpace:             int = 120
+    _DarkestPixelPercentageBilateral: int = 25
+    _DarkestPixelPercentageCanny:     int = 5
+    _MorphAnchor:                     int = 3
+    _SamplesNumber:                   int = 50
     
     @staticmethod
     def ExtractCrackPoints(imageBytes: bytes, userStart: Point, userEnd: Point) -> numpy.ndarray:
@@ -28,11 +28,6 @@ class ImageService:
         Prende i byte dell'immagine e i due punti utente (x, y),
         restituisce i punti della crepa come array NumPy (N, 2) in formato [row, col].
         """
-        
-        logger.info(
-            "ExtractCrackPoints called: image size: %d bytes, userStart: (%d, %d), userEnd: (%d, %d).",
-            len(imageBytes), userStart.X, userStart.Y, userEnd.X, userEnd.Y
-        )
         
         # Decodifica l'immagine dai byte HTTP
         imageRawData = numpy.frombuffer(imageBytes, numpy.uint8)
@@ -43,8 +38,6 @@ class ImageService:
             # rappresentano un'immagine valida. Il chiamante non può procedere.
             logger.error("Failed to decode image from bytes. The format may be unsupported or the data corrupt.")
             raise ValueError("Unable to decode image. Format not supported.")
-        
-        logger.debug("Image decoded successfully: %dx%d pixels.", image.shape[1], image.shape[0])
         
         # Esegue la pipeline per processare l'immagine della crepa
         return ImageService._RunPipeline(image, userStart, userEnd)
@@ -57,7 +50,7 @@ class ImageService:
 
         Restituisce un array NumPy di forma (N, 2) in formato [row, col].
         """
-        
+
         # -------------------- 1. Ridimensionamento --------------------
         # Mantiene le proporzioni originali, adattando il lato più lungo
         # a _MaxDisplayLength. Questo è necessario perché i parametri
@@ -81,48 +74,23 @@ class ImageService:
         userStart = Point(X=int(userStart.X * scaleX), Y=int(userStart.Y * scaleY))
         userEnd = Point(X=int(userEnd.X * scaleX), Y=int(userEnd.Y * scaleY))
         
-        logger.info(
-            "Phase 1: Resize: %dx%d → %dx%d (ratio=%.2f). "
-            "User points rescaled to start=(%d,%d), end=(%d,%d).",
-            imageWidth, imageHeight, displayWidth, displayHeight, imageRatio,
-            userStart.X, userStart.Y, userEnd.X, userEnd.Y,
-        )
-        
         # ---- 2. CLAHE (Contrast Limited Adaptive Histogram Equalization) ----
         # Migliora il contrasto locale: le crepe sottili su sfondi
         # disomogenei diventano molto più visibili.
-        meanBefore = float(numpy.mean(image))
         clahe = cv2.createCLAHE(clipLimit=ImageService._ClaheClipLimit)
         claheImage = numpy.clip(clahe.apply(image), 0, 255).astype(numpy.uint8)
-        meanAfter = float(numpy.mean(claheImage))
-        
-        logger.info(
-            "Phase 2: CLAHE (clipLimit=%d): mean brightness %.1f → %.1f.",
-            ImageService._ClaheClipLimit, meanBefore, meanAfter,
-        )
         
         # -------------------- 3. Bilateral filter --------------------
         # Riduce il rumore preservando i bordi netti — fondamentale qui
         # perché Canny (passo successivo) è molto sensibile al rumore.
         # Il bilateral è lento ma molto efficace su texture di cemento.
-        stdBefore = float(numpy.std(claheImage))
         filteredImage = cv2.bilateralFilter(
             claheImage,
             ImageService._BilateralDiameter,
             ImageService._BilateralSigmaColor,
             ImageService._BilateralSigmaSpace,
         )
-        stdAfter = float(numpy.std(filteredImage))
 
-        logger.info(
-            "Phase 3: Bilateral filter (d=%d, sigmaColor=%d, sigmaSpace=%d): "
-            "pixel std %.1f → %.1f.",
-            ImageService._BilateralDiameter,
-            ImageService._BilateralSigmaColor,
-            ImageService._BilateralSigmaSpace,
-            stdBefore, stdAfter,
-        )
-        
         # ----- 4. Appiattimento della luminosità (25% più scuro) -----
         # L'idea è eliminare le variazioni di illuminazione dello sfondo:
         # teniamo solo i pixel più scuri (la crepa) e "schiacciamo" tutto
@@ -131,12 +99,6 @@ class ImageService:
         backgroundValue = filteredImage[filteredImage > threshold1].min()
         darkenedImage = filteredImage.copy()
         darkenedImage[filteredImage > threshold1] = backgroundValue
-        
-        logger.info(
-            "Phase 4: Brightness flattening (%d%% darkest pixels): "
-            "threshold=%.1f, background flattened to %.1f.",
-            ImageService._DarkestPixelPercentageBilateral, threshold1, float(backgroundValue),
-        )
         
         # ----------------- 5. Canny (edge detection) -----------------
         # Gli edge vengono calcolate dinamicamente dalla mediana dell'immagine,
@@ -152,24 +114,10 @@ class ImageService:
         cannyWhitePixels = int(numpy.sum(cannyImage > 0))
         cannyWhitePercent = 100.0 * cannyWhitePixels / (displayWidth * displayHeight)
 
-        logger.info(
-            "Phase 5: Canny edge detection: median=%.1f, thresholds=[%.1f, %.1f]. "
-            "Edge pixels: %d (%.2f%% of image).",
-            median, lowerEdge, upperEdge, cannyWhitePixels, cannyWhitePercent,
-        )
-
         if cannyWhitePercent < 0.1:
-            logger.warning(
-                "Very few edge pixels detected (%.2f%%). "
-                "The crack may not be visible enough for reliable extraction.",
-                cannyWhitePercent,
-            )
+            pass
         elif cannyWhitePercent > 20.0:
-            logger.warning(
-                "Unusually high number of edge pixels (%.2f%%). "
-                "The image may contain excessive noise or texture.",
-                cannyWhitePercent,
-            )
+            pass
         
         # ------------------ 6. Rinforzo 5% più scuro -----------------
         # I pixel che il filtro bilateral ha identificato come i più scuri
@@ -180,16 +128,6 @@ class ImageService:
         reinforcedImage = cannyImage.copy()
         reinforcedImage[filteredImage < threshold2] = 255
 
-        reinforcedWhitePixels = int(numpy.sum(reinforcedImage > 0))
-        addedPixels = reinforcedWhitePixels - cannyWhitePixels
-
-        logger.info(
-            "Phase 6: Dark pixel reinforcement (%d%% darkest, threshold=%.1f): "
-            "%d pixels added to edges (total edge pixels: %d).",
-            ImageService._DarkestPixelPercentageCanny,
-            float(threshold2), addedPixels, reinforcedWhitePixels,
-        )
-        
         # ---------------- 7. Chiusura della morfologia ----------------
         # Colma i piccoli buchi e discontinuità nel bordo rilevato,
         # producendo una linea più continua. Un kernel quadrato di
@@ -200,43 +138,20 @@ class ImageService:
         )
         closedImage = cv2.morphologyEx(reinforcedImage, cv2.MORPH_CLOSE, kernel)
         
-        closedWhitePixels = int(numpy.sum(closedImage > 0))
-
-        logger.info(
-            "Phase 7: Morphological closing (kernel=%dx%d): "
-            "edge pixels %d → %d (filled %d gaps).",
-            ImageService._MorphAnchor, ImageService._MorphAnchor,
-            reinforcedWhitePixels, closedWhitePixels,
-            closedWhitePixels - reinforcedWhitePixels,
-        )
-        
         # --------------------- 8. Binarizzazione ----------------------
         # L'immagine è già quasi binaria dopo Canny, ma questa sogliatura
         # garantisce valori esattamente 0 o 255 per la scheletonizzazione.
         _, binaryImage = cv2.threshold(closedImage, 127, 255, cv2.THRESH_BINARY)
-        
-        logger.debug("Phase 8: Binarization: complete.")
         
         # ------------------- 9. Scheletonizzazione --------------------
         # Riduce ogni oggetto connesso a una linea di spessore 1px
         # preservando la topologia (ramificazioni incluse).
         # L'input richiede una maschera booleana (True = foreground).
         skeletonizedImage = skimage.morphology.skeletonize(binaryImage > 0)
-        
+
         skeletonPixels = int(numpy.sum(skeletonizedImage))
-
-        logger.info(
-            "Phase 9: Skeletonization: %d skeleton pixels (from %d edge pixels, reduction %.1fx).",
-            skeletonPixels, closedWhitePixels,
-            closedWhitePixels / max(1, skeletonPixels),
-        )
-
         if skeletonPixels < 20:
-            logger.warning(
-                "Very few skeleton pixels (%d). "
-                "The extracted crack path may be unreliable.",
-                skeletonPixels,
-            )
+            pass
         
         # ----------------- 10. Costruzione del grafo ------------------
         # sknw trasforma lo scheletro in un grafo dove:
@@ -244,49 +159,21 @@ class ImageService:
         #   - gli archi sono i segmenti che li collegano
         #   - ogni arco ha 'pts' (pixel) e 'weight' (lunghezza)
         graph = sknw.build_sknw(skeletonizedImage)
+
         nodeCount = graph.number_of_nodes()
-        edgeCount = graph.number_of_edges()
-
-        logger.info(
-            "Phase 10: Graph construction: %d nodes, %d edges.", nodeCount, edgeCount)
-
         if nodeCount > 100:
-            logger.warning(
-                "Graph has a high node count (%d), suggesting a heavily branched skeleton. "
-                "Consider increasing the morphological closing kernel or the bilateral filter strength.",
-                nodeCount,
-            )
+            pass
         
         # ---- 11. Selezione del percorso più vicino ai punti utente ----
         # L'algoritmo cerca la coppia di nodi (StartNode, EndNode) tale
         # che la somma delle distanze da UserStart e UserEnd sia minima.
         # Questo viene fatto componente connessa per componente connessa,
         # così crepe isolate non interferiscono tra loro.
-        logger.debug(
-            "Phase 11: Finding best node pair closest to userStart=(%d,%d), userEnd=(%d,%d)...",
-            userStart.X, userStart.Y, userEnd.X, userEnd.Y,
-        )
-        
         startNodeIndex, endNodeIndex = ImageService._FindBestNodePair(graph, userStart, userEnd)
-        
-        startCentroid = graph.nodes[startNodeIndex]["o"]
-        endCentroid   = graph.nodes[endNodeIndex]["o"]
 
-        logger.info(
-            "Phase 11: Best node pair found: startNode=%d (centroid=[%.1f, %.1f]), "
-            "endNode=%d (centroid=[%.1f, %.1f]).",
-            startNodeIndex, startCentroid[0], startCentroid[1],
-            endNodeIndex,   endCentroid[0],   endCentroid[1],
-        )
-        
         # ----------- 12. Shortest path e raccolta coordinate -----------
         shortestPath = networkx.shortest_path(graph, startNodeIndex, endNodeIndex, weight="weight")
         coords = ImageService._ExtractCoordsFromPath(graph, shortestPath)
-        
-        logger.info(
-            "Phase 12: Shortest path: %d nodes traversed, %d raw coordinate points extracted.",
-            len(shortestPath), len(coords),
-        )
         
         # ---------------- Optional. Visualizzazione ----------------
         # ImageService._Visualize(
@@ -315,11 +202,6 @@ class ImageService:
         else:
             indices = numpy.linspace(0, len(coords) - 1, ImageService._SamplesNumber, dtype=int)
             sampledCoords = coords[indices]
-
-        logger.info(
-            "Phase 13 — Sampling: %d points → %d sampled points. Pipeline complete.",
-            len(coords), len(sampledCoords),
-        )
         
         return sampledCoords
     
@@ -353,7 +235,6 @@ class ImageService:
 
             if len(componentNodes) < 2:
                 skippedComponents += 1
-                logger.debug("Component %d skipped: only %d node(s), need at least 2.", componentCount, len(componentNodes))
                 continue
 
             for i in range(len(componentNodes) - 1):
@@ -374,12 +255,6 @@ class ImageService:
                             startNodeIndex, endNodeIndex = nodeI, nodeJ
                         else:
                             startNodeIndex, endNodeIndex = nodeJ, nodeI
-
-        logger.debug(
-            "_FindBestNodePair: examined %d component(s), skipped %d. "
-            "Best distance sum: %.2f.",
-            componentCount, skippedComponents, float(minDistanceSum),
-        )
 
         if startNodeIndex is None:
             logger.error("No valid node pair found in the graph. The skeleton may be entirely disconnected or have no branches.")
@@ -410,7 +285,6 @@ class ImageService:
 
             if len(points) == 0:
                 skippedEdges += 1
-                logger.debug("Edge (%d → %d) has no pixel points, skipping.", nodeA, nodeB)
                 continue
 
             positionA = numpy.array(graph.nodes[nodeA]["o"])
@@ -423,11 +297,6 @@ class ImageService:
                 flippedEdges += 1
 
             coords.extend(points.tolist())
-
-        logger.debug(
-            "_ExtractCoordsFromPath: %d edges processed, %d flipped for correct orientation, %d skipped (empty).",
-            len(shortestPath) - 1, flippedEdges, skippedEdges,
-        )
 
         return numpy.array(coords)
 
@@ -482,11 +351,4 @@ class ImageService:
         
         cv2.imshow("Graph with the shortest path", rgbImage)
         cv2.waitKey(0) & 0xFF
-
-# from pathlib import Path
-
-# imageBytes = Path("Resources/crack10.jpg").read_bytes()
-# userStart = Point(X=420, Y=400)
-# userEnd = Point(X=480, Y=100)
-# crackPoints = ImageService.ExtractCrackPoints(imageBytes, userStart, userEnd)
-# numpy.save("CrackPointsData.npy", crackPoints)
+        
