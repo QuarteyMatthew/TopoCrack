@@ -1,7 +1,5 @@
 # TopoCrack — Documentazione Backend
 
-> "Ogni cosa che puoi immaginare, la natura l’ha già creata." (Albert Einstein)
-
 ---
 
 ## Indice
@@ -29,9 +27,9 @@
 
 ## Panoramica del progetto
 
-TopoCrack è un backend FastAPI che riceve l'immagine di una **crepa su una superficie rocciosa**, individua il tracciato della frattura e lo confronta — tramite l'algoritmo **DTW (Dynamic Time Warping)** — con milioni di finestre estratte dalle coste mondiali (Natural Earth). L'output è la porzione di costa il cui profilo assomiglia di più alla crepa analizzata, con le sue coordinate geografiche.
+TopoCrack è un backend FastAPI che riceve l'immagine di una crepa su una superficie rocciosa, individua il tracciato della frattura e lo confronta — tramite l'algoritmo DTW (Dynamic Time Warping) — con milioni di finestre estratte dalle coste mondiali (Natural Earth). L'output è la porzione di costa il cui profilo assomiglia di più alla crepa analizzata, con le sue coordinate geografiche.
 
-L'intuizione di fondo è affascinante: la morfologia delle fratture geologiche può ricordare quella delle linee costiere, formate dagli stessi processi di erosione e tensione. TopoCrack sfrutta questa somiglianza in modo computazionale.
+L'idea di fondo è affascinante: la morfologia delle fratture geologiche può ricordare quella delle linee costiere, formate dagli stessi processi di erosione e tensione. TopoCrack sfrutta questa somiglianza in modo computazionale.
 
 ---
 
@@ -118,7 +116,7 @@ Backend/
 
 ### Server.py — Il punto di ingresso
 
-`Server.py` è il file che istanzia l'applicazione FastAPI e ne gestisce il ciclo di vita tramite il context manager asincrono `Lifespan`. La scelta del **lifespan** (invece del classico `@app.on_event`) è moderna e preferibile: garantisce che il server si blocchi durante il caricamento dei dati, rifiutando richieste prima di essere pronto.
+`Server.py` è il file che istanzia l'applicazione FastAPI e ne gestisce il ciclo di vita tramite il context manager asincrono `Lifespan`. La scelta del lifespan (invece del classico `@app.on_event`) è moderna e preferibile: garantisce che il server si blocchi durante il caricamento dei dati, rifiutando richieste prima di essere pronto.
 
 All'avvio, il server carica (o rigenera) il dataset delle coste normalizzate, salvandolo in `server.state.CoastalData`. Questo oggetto — un `numpy.ndarray` di milioni di finestre — vive in memoria per tutta la durata del processo, evitando il costo di ricaricarlo a ogni richiesta. Se il caricamento fallisce, il server logga un errore `CRITICAL` e si rifiuta di avviarsi: non avrebbe senso accettare richieste senza il dato fondamentale.
 
@@ -136,7 +134,7 @@ server.state.CoastalData = CoastlineService.LoadCoastalData()
 - Se `Cache/NormalizedSections.pkl` esiste → lo carica e lo restituisce immediatamente (millisecondi).
 - Se non esiste → scarica le coste da Natural Earth, costruisce tutte le finestre e salva il pickle per le esecuzioni future.
 
-Il dataset viene costruito a **sei scale geografiche diverse**, raddoppiando ogni volta la spaziatura tra i punti. Questo è fondamentale: una crepa di 10 cm su roccia potrebbe corrispondere a una costa che a una certa scala appare come una curva dolce, e a un'altra come una sequenza di frastagliature. Il confronto multi-scala copre questa ambiguità.
+Il dataset viene costruito a sei scale geografiche diverse, raddoppiando ogni volta la spaziatura tra i punti. Questo è fondamentale: una crepa di 10 cm su roccia potrebbe corrispondere a una costa che a una certa scala appare come una curva dolce, e a un'altra come una sequenza di frastagliature. Il confronto multi-scala copre questa ambiguità.
 
 | Build | Spaziatura punti | Lunghezza fisica finestra |
 | ----- | ---------------- | ------------------------- |
@@ -147,7 +145,7 @@ Il dataset viene costruito a **sei scale geografiche diverse**, raddoppiando ogn
 | 5     | 100 km           | 5 000 km                  |
 | 6     | 200 km           | 10 000 km                 |
 
-> Tutte le finestre sono normalizzate a **50 punti** indipendentemente dalla scala: il confronto DTW è quindi sempre equo tra build diverse.
+> Tutte le finestre sono normalizzate a 50 punti indipendentemente dalla scala: il confronto DTW è quindi sempre equo tra build diverse.
 
 ---
 
@@ -155,13 +153,13 @@ Il dataset viene costruito a **sei scale geografiche diverse**, raddoppiando ogn
 
 Questo modulo privato (il prefisso `_` indica che non va importato direttamente) contiene tutta la matematica geografica del progetto. Vale la pena capire ogni funzione:
 
-**`DownloadCoastline`** scarica lo shapefile Natural Earth dalla risoluzione richiesta (tipicamente `10m`, cioè alta precisione) e lo scompatta nella cache locale. Gestisce la cache in modo idempotente: se i file esistono già, non scarica nulla.
+`DownloadCoastline` scarica lo shapefile Natural Earth dalla risoluzione richiesta (tipicamente `10m`, cioè alta precisione) e lo scompatta nella cache locale. Gestisce la cache in modo idempotente: se i file esistono già, non scarica nulla.
 
-**`ResampleCoastlineToPoints`** converte una `LineString` geografica in un array di punti equispaziati usando il **calcolo geodetico WGS84** (non la geometria euclidea, che sarebbe imprecisa su scala globale). La libreria `pyproj` con `Geod(ellps="WGS84")` si occupa di misurare le distanze lungo l'ellissoide terrestre.
+`ResampleCoastlineToPoints` converte una `LineString` geografica in un array di punti equispaziati usando il calcolo geodetico WGS84 (non la geometria euclidea, che sarebbe imprecisa su scala globale). La libreria `pyproj` con `Geod(ellps="WGS84")` si occupa di misurare le distanze lungo l'ellissoide terrestre.
 
-**`GenerateSlidingWindows`** scorre la sequenza di punti con una finestra scorrevole di dimensione fissa (`windowSize = 50`) e un passo (`stride = 3`), estraendo ogni sotto-sequenza come una finestra candidata.
+`GenerateSlidingWindows` scorre la sequenza di punti con una finestra scorrevole di dimensione fissa (`windowSize = 50`) e un passo (`stride = 3`), estraendo ogni sotto-sequenza come una finestra candidata.
 
-**`WindowToNormalizedPoints`** è il cuore della normalizzazione: proietta la finestra in un sistema UTM locale (per avere coordinate in metri), poi applica tre trasformazioni — traslazione all'origine, rotazione per allineare il punto finale all'asse x positivo, e scala per portare x nell'intervallo `[0, 1]`. Il risultato è una curva "canonica" confrontabile con qualsiasi altra.
+`WindowToNormalizedPoints` è il cuore della normalizzazione: proietta la finestra in un sistema UTM locale (per avere coordinate in metri), poi applica tre trasformazioni — traslazione all'origine, rotazione per allineare il punto finale all'asse x positivo, e scala per portare x nell'intervallo `[0, 1]`. Il risultato è una curva "canonica" confrontabile con qualsiasi altra.
 
 ---
 
@@ -169,11 +167,11 @@ Questo modulo privato (il prefisso `_` indica che non va importato direttamente)
 
 `DtwService` gestisce tutto il processo di confronto tra la crepa e il dataset. Il metodo principale `FindBestMatch` riceve i punti grezzi della crepa e l'intero dataset costiero, e restituisce la finestra con il costo DTW più basso.
 
-**Preparazione della crepa (`_PreparePoints`):** applica la stessa normalizzazione usata per le coste — traslazione, rotazione, scala. Questo è essenziale: il confronto DTW ha senso solo se entrambe le sequenze vivono nello stesso spazio normalizzato `[0,1]`.
+Preparazione della crepa (`_PreparePoints`): applica la stessa normalizzazione usata per le coste — traslazione, rotazione, scala. Questo è essenziale: il confronto DTW ha senso solo se entrambe le sequenze vivono nello stesso spazio normalizzato `[0,1]`.
 
-**Gestione dell'ambiguità di orientamento:** una crepa può essere letta da sinistra a destra o da destra a sinistra, e la costa corrispondente potrebbe avere l'orientamento opposto. Per gestirlo, `_MirrorAndReverseCrackPoints` genera una versione specchiata (y → −y) e rovesciata (l'ordine dei punti viene invertito) della crepa. Il confronto viene fatto con entrambe le versioni, tenendo il costo minore.
+Gestione dell'ambiguità di orientamento: una crepa può essere letta da sinistra a destra o da destra a sinistra, e la costa corrispondente potrebbe avere l'orientamento opposto. Per gestirlo, `_MirrorAndReverseCrackPoints` genera una versione specchiata (y → −y) e rovesciata (l'ordine dei punti viene invertito) della crepa. Il confronto viene fatto con entrambe le versioni, tenendo il costo minore.
 
-**Rilevamento della curvatura anomala:** se il rapporto tra la lunghezza del percorso e la lunghezza della corda supera 3.0, il servizio lancia un warning: significa che la crepa si arrotola su se stessa, e nessuna costa reale ha questa topologia. È un controllo di qualità intelligente che aiuta l'utente a riformulare la selezione.
+Rilevamento della curvatura anomala: se il rapporto tra la lunghezza del percorso e la lunghezza della corda supera 3.0, il servizio lancia un warning: significa che la crepa si arrotola su se stessa, e nessuna costa reale ha questa topologia. È un controllo di qualità intelligente che aiuta l'utente a riformulare la selezione.
 
 ```
 curvatureRatio = pathLength / chordLength
@@ -188,7 +186,7 @@ Se > 1.5 → warning leggero restituito nella risposta al frontend
 
 Il DTW è un algoritmo O(n·m) in tempo e spazio, dove n e m sono le lunghezze delle due sequenze. Con milioni di finestre nel dataset, un'implementazione Python sarebbe troppo lenta. `DtwCore.c` implementa il DTW 2D in C puro, compilato come libreria condivisa (`.dll` su Windows, `.so` su Linux, `.dylib` su macOS) e caricato da Python via `ctypes`.
 
-L'ottimizzazione più importante è l'**early exit con lower bound**: alla fine di ogni riga della matrice di costo, il codice calcola il minimo della riga. Se questo valore è già superiore al miglior costo trovato finora (`bestCost`), nessun percorso che attraversa quella riga potrà migliorare il risultato, e il calcolo si interrompe. Questo riduce drasticamente il numero di celle calcolate per le finestre "chiaramente peggiori".
+L'ottimizzazione più importante è l'early exit con lower bound: alla fine di ogni riga della matrice di costo, il codice calcola il minimo della riga. Se questo valore è già superiore al miglior costo trovato finora (`bestCost`), nessun percorso che attraversa quella riga potrà migliorare il risultato, e il calcolo si interrompe. Questo riduce drasticamente il numero di celle calcolate per le finestre "chiaramente peggiori".
 
 ```c
 // Early exit: rowMin è un lower bound del costo finale.
@@ -225,8 +223,8 @@ e restituisce un JSON con le coordinate geografiche della costa più simile e il
 
 I modelli Pydantic definiscono contratti chiari per request e response:
 
-- **`AnalysisRequest`** — contiene i byte dell'immagine e i due punti pixel. Il validator `ImageMustNotBeEmpty` rifiuta immagini vuote prima ancora di entrare nel processing.
-- **`AnalysisResponse`** — restituisce `StartCoord` e `EndCoord` (coordinate WGS84 lon/lat), il `DtwScore` (costo del match migliore, valori più bassi = match migliore), e un campo opzionale `Warning` per informare il frontend di anomalie nella crepa selezionata.
+- `AnalysisRequest` — contiene i byte dell'immagine e i due punti pixel. Il validator `ImageMustNotBeEmpty` rifiuta immagini vuote prima ancora di entrare nel processing.
+- `AnalysisResponse` — restituisce `StartCoord` e `EndCoord` (coordinate WGS84 lon/lat), il `DtwScore` (costo del match migliore, valori più bassi = match migliore), e un campo opzionale `Warning` per informare il frontend di anomalie nella crepa selezionata.
 
 ---
 
@@ -234,23 +232,23 @@ I modelli Pydantic definiscono contratti chiari per request e response:
 
 Ecco cosa succede, nell'ordine, quando arriva una richiesta a `/api/analyze`:
 
-**Passo 1 — Validazione:** Pydantic valida il form e i campi. Se l'immagine è vuota o i tipi sono sbagliati, risponde 422 immediatamente.
+Passo 1 — Validazione: Pydantic valida il form e i campi. Se l'immagine è vuota o i tipi sono sbagliati, risponde 422 immediatamente.
 
-**Passo 2 — Estrazione punti:** `ImageService` analizza l'immagine e individua i pixel del tracciato della crepa tra i due punti indicati dall'utente.
+Passo 2 — Estrazione punti: `ImageService` analizza l'immagine e individua i pixel del tracciato della crepa tra i due punti indicati dall'utente.
 
-**Passo 3 — Preparazione geometrica:** `DtwService._PreparePoints` normalizza i punti della crepa (traslazione → rotazione → scala). Viene anche generata la versione specchiata+rovesciata.
+Passo 3 — Preparazione geometrica: `DtwService._PreparePoints` normalizza i punti della crepa (traslazione → rotazione → scala). Viene anche generata la versione specchiata+rovesciata.
 
-**Passo 4 — Controllo curvatura:** viene calcolato il `curvatureRatio`. Se è alto, viene preparato un messaggio di warning per il frontend.
+Passo 4 — Controllo curvatura: viene calcolato il `curvatureRatio`. Se è alto, viene preparato un messaggio di warning per il frontend.
 
-**Passo 5 — Ricerca DTW:** il loop su `coastalData` confronta la crepa (nelle sue due versioni) con ogni finestra costiera usando `DtwCost2D` in C. La best cost viene aggiornata progressivamente, permettendo all'early exit di scartare le finestre peggiori sempre prima.
+Passo 5 — Ricerca DTW: il loop su `coastalData` confronta la crepa (nelle sue due versioni) con ogni finestra costiera usando `DtwCost2D` in C. La best cost viene aggiornata progressivamente, permettendo all'early exit di scartare le finestre peggiori sempre prima.
 
-**Passo 6 — Restituzione:** le coordinate geografiche della finestra vincente vengono impacchettate in `AnalysisResponse` e restituite come JSON.
+Passo 6 — Restituzione: le coordinate geografiche della finestra vincente vengono impacchettate in `AnalysisResponse` e restituite come JSON.
 
 ---
 
 ## Dataset delle coste — costruzione multi-scala
 
-Il dataset viene costruito **una sola volta** e poi serializzato in `Cache/NormalizedSections.pkl`. La costruzione richiede tempo (download, ricampionamento geodetico, proiezione UTM, normalizzazione), ma una volta fatto, il server si avvia in pochi secondi caricando il pickle.
+Il dataset viene costruito una sola volta e poi serializzato in `Cache/NormalizedSections.pkl`. La costruzione richiede tempo (download, ricampionamento geodetico, proiezione UTM, normalizzazione), ma una volta fatto, il server si avvia in pochi secondi caricando il pickle.
 
 La struttura di ogni finestra è un dizionario Python con questi campi:
 
@@ -268,7 +266,7 @@ La struttura di ogni finestra è un dizionario Python con questi campi:
 
 ## L'algoritmo DTW 2D — spiegazione intuitiva
 
-Il **Dynamic Time Warping** è un algoritmo per misurare la somiglianza tra due sequenze di punti che possono essere di lunghezza diversa o "sfasate" temporalmente. A differenza della distanza euclidea punto-per-punto, il DTW trova l'allineamento ottimale tra le sequenze, permettendo corrispondenze non lineari.
+Il Dynamic Time Warping è un algoritmo per misurare la somiglianza tra due sequenze di punti che possono essere di lunghezza diversa o "sfasate" temporalmente. A differenza della distanza euclidea punto-per-punto, il DTW trova l'allineamento ottimale tra le sequenze, permettendo corrispondenze non lineari.
 
 Pensa a due melodie della stessa canzone, una suonata più veloce dell'altra: la distanza euclidea direbbe che sono diverse, ma il DTW riconosce che sono la stessa melodia "stirata". Nel contesto di TopoCrack, la crepa e la costa possono avere la stessa forma generale ma con diversa "velocità" di curvatura — il DTW le abbina correttamente.
 
@@ -300,14 +298,14 @@ Se si vuole rigenerare il dataset (ad esempio dopo aver cambiato i parametri di 
 
 ## Script di supporto
 
-**`Scripts/BuildNative.py`** compila `DtwCore.c` nella libreria condivisa appropriata per la piattaforma corrente. Va eseguito una volta prima di avviare il server per la prima volta, o dopo qualsiasi modifica a `DtwCore.c`.
+`Scripts/BuildNative.py` compila `DtwCore.c` nella libreria condivisa appropriata per la piattaforma corrente. Va eseguito una volta prima di avviare il server per la prima volta, o dopo qualsiasi modifica a `DtwCore.c`.
 
 ```bash
 # Dalla directory Backend/
 python Scripts/BuildNative.py
 ```
 
-**`Scripts/InstallDependencies.py`** legge `Dependencies.txt` e installa tutti i pacchetti Python necessari.
+`Scripts/InstallDependencies.py` legge `Dependencies.txt` e installa tutti i pacchetti Python necessari.
 
 ```bash
 python Scripts/InstallDependencies.py
